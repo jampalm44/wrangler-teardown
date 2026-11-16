@@ -1,0 +1,1371 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wrangler 2.5L Teardown</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: workbench app. Header with system chips, 3D stage on the left with tool rows under it, service-manual panel on the right. Stacks on phones. */
+:root{
+  --bg:#e8ecf0; --panel:#f8f9fb; --fg:#18212b; --muted:#566273; --line:#cdd5de;
+  --chip:#ffffff; --viewport:#dce3ea; --accent:#b87300; --accent-soft:rgba(184,115,0,.12);
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --panel:#141b22; --fg:#e3e8ee; --muted:#8f9cac; --line:#26313c;
+  --chip:#1a232d; --viewport:#0a0f14; --accent:#f0b030; --accent-soft:rgba(240,176,48,.14); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --panel:#141b22; --fg:#e3e8ee; --muted:#8f9cac; --line:#26313c;
+  --chip:#1a232d; --viewport:#0a0f14; --accent:#f0b030; --accent-soft:rgba(240,176,48,.14); color-scheme:dark}
+
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5;overflow:hidden}
+.app{height:100%;box-sizing:border-box;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+.top{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;min-width:0}
+.brand{min-width:0}
+h1{font-family:var(--f-display);font-weight:700;font-size:28px;line-height:1;letter-spacing:.01em;text-transform:uppercase;margin:0;text-wrap:balance}
+.sub{margin:4px 0 0;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.chips{display:flex;gap:6px;overflow-x:auto;min-width:0;flex:1;padding-bottom:2px;scrollbar-width:thin}
+.chip{flex:none;display:inline-flex;align-items:center;gap:7px;font:500 12.5px var(--f-body);color:var(--fg);
+  background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.chip .sw{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.chip[aria-pressed="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);background:color-mix(in srgb,var(--c) 14%,var(--chip))}
+.chipsep{flex:none;width:1px;background:var(--line);margin:3px 2px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:12px;min-height:0}
+.stage{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:8px;min-height:0;min-width:0}
+.viewport{position:relative;border-radius:10px;overflow:hidden;background:var(--viewport);border:1px solid var(--line);min-height:0;touch-action:none}
+.viewport canvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+.toolrows{display:grid;gap:6px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{font:500 13px var(--f-body);color:var(--fg);background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1200;font-weight:600}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,.chip:focus-visible,.link:focus-visible,input:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.slider{display:inline-flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--line);border-radius:7px;padding:4px 12px;font:500 13px var(--f-body)}
+.slider input{width:120px;accent-color:var(--accent)}
+.slider.off{opacity:.45}
+.spacer{flex:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--chip)}
+.seg button{font:500 13px var(--f-body);color:var(--fg);background:none;border:0;border-right:1px solid var(--line);padding:7px 11px;cursor:pointer;min-width:34px}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.seg.mono button{font-family:var(--f-mono);font-size:12.5px}
+.seglbl{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-left:4px}
+
+.hint{position:absolute;left:12px;bottom:10px;font:12px var(--f-mono);color:var(--muted);pointer-events:none;max-width:calc(100% - 24px)}
+.overlay{position:absolute;left:12px;top:12px;display:grid;gap:8px;pointer-events:none;max-width:calc(100% - 24px)}
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,auto));gap:4px;justify-content:start}
+.strip .cell{background:color-mix(in srgb,var(--c) 22%,var(--panel));border:1px solid color-mix(in srgb,var(--c) 60%,transparent);border-radius:6px;padding:4px 8px;min-width:70px}
+.strip .n{font:600 11px var(--f-mono);color:var(--muted)}
+.strip .s{font:700 15px var(--f-display);text-transform:uppercase;letter-spacing:.04em}
+.strip .meta{grid-column:1/-1;font:11px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.drivebox{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px;line-height:1.45;min-width:0}
+.drivebox b{font:700 15px var(--f-display);text-transform:uppercase;letter-spacing:.03em;margin-right:8px}
+.drivebox .note{display:block}
+.drivebox .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.drivebox .note{color:var(--muted);margin-top:3px}
+.cbar{position:absolute;right:12px;top:12px;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:6px 6px 6px 12px;box-shadow:0 4px 18px rgba(0,0,0,.12);max-width:calc(100% - 24px);flex-wrap:wrap}
+.cbar .count{font:700 18px var(--f-display);letter-spacing:.03em;font-variant-numeric:tabular-nums}
+.cbar .lbl{font-size:12px;color:var(--muted)}
+.toast{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);background:var(--fg);color:var(--bg);font:500 13px var(--f-body);padding:8px 14px;border-radius:8px;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:500 12px var(--f-body);white-space:nowrap;transform:translate(12px,12px)}
+.tip i{font-style:normal;color:var(--muted);font-family:var(--f-mono);font-size:11px;margin-left:6px}
+
+.panel{overflow-y:auto;min-height:0;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px 24px}
+.crumbs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font:12px var(--f-mono);color:var(--muted);margin-bottom:10px}
+.link{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.link:hover{color:var(--fg)}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.eyebrow .sw{width:10px;height:10px;border-radius:2px;background:var(--c)}
+.panel h2{font-family:var(--f-display);font-weight:700;font-size:30px;line-height:1.05;margin:6px 0 10px;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
+.panel h3{font:600 11px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;padding-top:12px;border-top:1px solid var(--line)}
+.panel h4{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.panel p{margin:0 0 10px;max-width:62ch}
+.lede{font-size:15px}
+dl.specs{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:6px 14px;margin:0}
+dl.specs dt{font:12px var(--f-mono);color:var(--muted);padding-top:1px}
+dl.specs dd{margin:0;font-weight:500;font-variant-numeric:tabular-nums}
+.watch{background:var(--accent-soft);border-radius:8px;padding:10px 12px}
+.watch p{margin:0}
+.rel{display:flex;flex-wrap:wrap;gap:6px}
+.rel .chip{font-size:12px;padding:4px 10px}
+.syslist{display:grid;gap:6px}
+.sysrow{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:start;text-align:left;width:100%;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;color:var(--fg);font:inherit}
+.sysrow:hover{border-color:var(--c)}
+.sysrow .sw{width:12px;height:12px;border-radius:3px;background:var(--c);margin-top:3px}
+.sysrow b{font-weight:600;display:block}
+.sysrow small{color:var(--muted);font-size:12.5px;line-height:1.4;display:block}
+.sysrow .ct{font:12px var(--f-mono);color:var(--muted)}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:18px}
+.foot{margin-top:22px;font-size:12px;color:var(--muted)}
+.howto{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.howto li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px}
+.howto b{font:500 12px var(--f-mono);color:var(--muted);padding-top:1px}
+.challengecard{border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:10px 12px;margin-bottom:14px}
+
+@media (max-width:880px){
+  body{overflow:auto}
+  .app{height:auto}
+  .main{grid-template-columns:minmax(0,1fr)}
+  .stage{grid-template-rows:auto auto}
+  .viewport{height:62svh;min-height:360px}
+  .panel{overflow:visible}
+  .slider input{width:96px}
+  h1{font-size:24px}
+  .hint{display:none}
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Wrangler 2.5L Teardown</h1>
+      <p class="sub">2000 Jeep Wrangler TJ · 2.5L I4 · AX5 five-speed · NP231</p>
+    </div>
+    <div class="chips" id="chips" role="toolbar" aria-label="Highlight a system"></div>
+  </header>
+  <main class="main">
+    <section class="stage">
+      <div class="viewport" id="vp">
+        <div class="overlay">
+          <div class="strip" id="strip" hidden></div>
+        </div>
+        <div class="cbar" id="cbar" hidden></div>
+        <div class="toast" id="toast" hidden></div>
+        <div class="tip" id="tip" hidden></div>
+        <div class="hint" id="hint">Drag a part to pull it off · Click for details · Drag empty space to orbit · Right-drag to pan · Scroll to zoom</div>
+      </div>
+      <div class="toolrows">
+        <div class="tools">
+          <div class="seg" id="viewSeg" role="group" aria-label="View">
+            <button data-v="jeep" aria-pressed="true">Whole Jeep</button><button data-v="engine" aria-pressed="false">Engine only</button>
+          </div>
+          <label class="slider" id="explodeWrap" for="explode"><span>Explode</span><input type="range" id="explode" min="0" max="1" step="0.01" value="0"></label>
+          <button class="btn" id="xray" aria-pressed="true">See inside</button>
+          <button class="btn" id="reassemble">Reassemble</button>
+          <button class="btn" id="resetView">Reset view</button>
+          <span class="spacer"></span>
+          <button class="btn primary" id="challenge">Rebuild challenge</button>
+        </div>
+        <div class="tools">
+          <button class="btn" id="run" aria-pressed="true">Stop engine</button>
+          <button class="btn" id="speed" aria-pressed="false">Speed: slow</button>
+          <span id="driveCtl" style="display:contents">
+            <span class="seglbl">Gear</span>
+            <div class="seg mono" id="gearSeg" role="group" aria-label="Transmission gear"></div>
+            <span class="seglbl">Transfer case</span>
+            <div class="seg mono" id="tcSeg" role="group" aria-label="Transfer case range"></div>
+          </span>
+        </div>
+        <div class="drivebox" id="drivebox" hidden></div>
+      </div>
+    </section>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+const V = THREE.Vector3;
+
+/* ---------- Systems ---------- */
+const SYS = {
+  core:{name:"Engine core",color:"#8d97a3",desc:"The block, head, covers, and accessory belt form the sealed structure that everything else on the engine bolts to."},
+  rotating:{name:"Rotating assembly",color:"#c9783f",desc:"Pistons, connecting rods, the crankshaft, and the flywheel turn the push of burning fuel into a spinning shaft."},
+  valvetrain:{name:"Valvetrain",color:"#c3a53c",desc:"The camshaft, timing chain, and valves open and close each cylinder's ports in step with the pistons."},
+  airfuel:{name:"Air & fuel",color:"#3e8ed0",desc:"Fuel is pumped from the tank to the injectors, and air comes in through the throttle body and intake manifold."},
+  ignition:{name:"Ignition",color:"#d6485b",desc:"Sensors tell the computer where the pistons are, and the coil, distributor, and plugs fire each cylinder at the right moment."},
+  cooling:{name:"Cooling",color:"#25ab9d",desc:"Coolant carries heat from the block and head to the radiator, where moving air takes it away."},
+  ac:{name:"Air conditioning",color:"#b9dbe8",desc:"The compressor pumps refrigerant through the condenser up front and the evaporator behind the dash, carrying heat out of the cab and dumping it into the outside air."},
+  lube:{name:"Lubrication",color:"#8e6fd6",desc:"The oil pump pulls oil from the pan and sends it through the filter to every bearing and moving surface."},
+  exhaust:{name:"Exhaust",color:"#8a5f45",desc:"Burned gas leaves through the manifold, catalytic converter, and muffler, while oxygen sensors report how well the fuel burned."},
+  electrical:{name:"Electrical",color:"#5aa548",desc:"The battery, alternator, and starter supply power; fuses, relays, and the engine computer distribute and control it."},
+  drivetrain:{name:"Drivetrain",color:"#d46fa0",desc:"The clutch, AX5 transmission, NP231 transfer case, driveshafts, and axles carry engine power to the wheels."},
+  wheels:{name:"Wheels & tires",color:"#b0a27e",desc:"Four road wheels and a tailgate spare. Tire size sets how far the Jeep travels for each turn of the axles."},
+  suspension:{name:"Suspension",color:"#4cc0e0",desc:"Quadra-Coil: a coil spring at each corner, with control arms and a track bar holding each solid axle in place."},
+  steering:{name:"Steering",color:"#a8c23a",desc:"The steering wheel turns a power-assisted gear box on the frame, which pushes linkage that swings the front knuckles."},
+  brakes:{name:"Brakes",color:"#e8613c",desc:"The pedal pushes fluid from the master cylinder to discs up front and drums at the rear."},
+  frame:{name:"Frame & body",color:"#6e7a88",desc:"A steel ladder frame carries everything, and the body tub, fenders, and hood bolt on top."}
+};
+const SYS_ORDER = Object.keys(SYS);
+const ENGINE_SYS = ["core","rotating","valvetrain","airfuel","ignition","cooling","ac","lube","exhaust","electrical"];
+
+/* ---------- Geometry constants (inches). +x = front, +z = driver side, y = up ---------- */
+const CYL_X = [6.6, 2.2, -2.2, -6.6];
+const PHASE = [0, 540, 180, 360];
+const THROW = [0, Math.PI, Math.PI, 0];
+const CR = 1.594, ROD = 5.875, LIFT = 0.42;
+const CAM_Y = 4.2, CAM_Z = -2.2;
+const DIST = {x:-0.5, z:-5.6, top:9.75};
+const TERM_ANGLE = [0, 270, 90, 180];
+const EXH_PIPE = [[-1,8.2,6.4],[-1.8,5,7.0],[-3,1,7.2],[-5,-3,7.0],[-8,-6,6.4]];
+const ENG = new V(36,25,0);               // engine origin (crank centerline, rear of cyl 1 area) in vehicle space
+const FA = 46.7, RA = -46.7, AY = 13.5, TZ = 29, RZ = 14.5;   // axles, axle height, half track, frame rail z
+const GEARS = {R:-4.74, N:0, "1":3.93, "2":2.33, "3":1.45, "4":1.00, "5":0.85};
+const GEAR_NAME = {R:"Reverse",N:"Neutral","1":"1st","2":"2nd","3":"3rd","4":"4th","5":"5th"};
+const TC = {"2H":1, "4H":1, N:0, "4L":2.72};
+const AXLE = 4.11, TIRE_D = 27.1;
+
+/* ---------- Engine parts ---------- */
+const ENGINE_PARTS = [
+ {id:"block",sys:"core",name:"Engine block",xray:true,ex:[0,0,0],
+  what:"The heavy cast-iron core of the engine. It holds the four cylinders the pistons slide in, the crankshaft along the bottom, and the camshaft along the passenger side. Coolant and oil travel through passages cast inside it.",
+  specs:[["Material","Cast iron"],["Cylinders","4 in a row, No. 1 at the front"],["Bore","3.88 in (98.4 mm)"],["Main bearings","5"]],
+  watch:"Coolant seeping from the freeze plugs on the sides of the block, and oil dripping from the rear main seal where the crankshaft exits the back.",
+  links:["head","headGasket","crankshaft","pistons","camshaft","oilPan","timingCover","frame"]},
+ {id:"headGasket",sys:"core",name:"Head gasket",ex:[0,7,0],
+  what:"A thin layered seal clamped between the block and the cylinder head. It holds combustion pressure inside each cylinder and keeps coolant and oil in their own passages.",
+  specs:[["Fire rings","One around each cylinder"],["Sits between","Block deck and head"]],
+  watch:"A failing head gasket shows up as white, sweet-smelling exhaust, milky oil, bubbles in the coolant, or overheating that keeps coming back.",
+  links:["block","head"]},
+ {id:"head",sys:"core",name:"Cylinder head",xray:true,ex:[0,12,0],
+  what:"The cast-iron cap on top of the cylinders. Each cylinder's combustion chamber is formed here, along with the intake and exhaust ports, the valve seats, and the spark plug holes. On this engine the intake and exhaust ports are both on the driver side.",
+  specs:[["Material","Cast iron"],["Valves","2 per cylinder, 8 total"],["Ports","Intake and exhaust, driver side"],["Spark plugs","Passenger side"]],
+  watch:"Severe overheating can warp or crack the head. If coolant keeps disappearing with no visible leak, have the system pressure-tested.",
+  links:["block","headGasket","valvetrain","valveCover","intakeManifold","exhaustManifold","sparkPlugs","thermostat"]},
+ {id:"valveCover",sys:"core",name:"Valve cover",xray:true,ex:[0,26,0],
+  what:"A cover over the top of the head that keeps the oil splashing around the rocker arms inside the engine. It carries the oil fill cap and a hose for the crankcase ventilation (PCV) system.",
+  specs:[["Oil fill","Cap on top"],["Ventilation","PCV and breather hoses"]],
+  watch:"The gasket is a very common leak. Oil runs down onto the hot exhaust manifold and you smell burning oil after a drive.",
+  links:["head","valvetrain"]},
+ {id:"timingCover",sys:"core",name:"Timing cover",xray:true,ex:[7,0,0],
+  what:"Covers the timing chain at the front of the engine and holds the front crankshaft seal. The crank pulley bolts on just outside it.",
+  specs:[["Seal","Front crankshaft seal"],["Location","Front of the block"]],
+  watch:"Oil flung around the front of the crank pulley usually means a worn front seal.",
+  links:["block","timingChain","belt","crankshaft"]},
+ {id:"belt",sys:"core",name:"Serpentine belt & crank pulley",ex:[12,0,0],
+  what:"One long ribbed belt, turned by the crankshaft pulley, drives the A/C compressor, alternator, water pump, and power steering pump. A spring-loaded tensioner keeps it tight.",
+  specs:[["Driven by","Crankshaft pulley"],["Drives","A/C compressor, alternator, water pump, power steering"],["Tension","Automatic tensioner"]],
+  watch:"Squealing at startup or when the A/C kicks on, cracks across the ribs, or a deep water crossing that throws the belt off.",
+  links:["crankshaft","acCompressor","alternator","waterPump","psPump","timingCover"]},
+
+ {id:"crankshaft",sys:"rotating",name:"Crankshaft",ex:[0,-8,0],
+  what:"Turns the up-and-down motion of the pistons into rotation. Each connecting rod hooks onto an offset journal called a throw. On a four-cylinder, throws 1 and 4 point the same way and throws 2 and 3 point the opposite way, so two pistons are always rising while the other two fall.",
+  specs:[["Stroke","3.19 in (81 mm)"],["Main bearings","5"],["Throw layout","1 & 4 together, 2 & 3 opposite"],["Drives","Timing chain, crank pulley, flywheel"]],
+  watch:"A deep knock that gets louder under load points to a worn rod or main bearing, often caused by running low on oil.",
+  links:["pistons","flywheel","timingChain","belt","block","crankSensor"]},
+ {id:"pistons",sys:"rotating",name:"Pistons & connecting rods",ex:[0,4,0],
+  what:"Burning fuel pushes each piston down, and its connecting rod passes that force to the crankshaft. Rings around each piston seal against the cylinder wall so pressure stays above it and oil stays below.",
+  specs:[["Displacement","150 cu in (2.46 L)"],["Bore × stroke","3.88 × 3.19 in"],["Compression ratio","9.1 : 1"],["Firing order","1‑3‑4‑2"],["Output","120 hp at 5,400 rpm"],["Torque","140 lb‑ft at 3,500 rpm"]],
+  watch:"Worn rings let oil into the combustion chamber. That shows up as blue smoke and oil use between changes.",
+  links:["crankshaft","block","head","sparkPlugs"]},
+ {id:"flywheel",sys:"rotating",name:"Flywheel",ex:[-7,0,0],
+  what:"A heavy disc bolted to the back of the crankshaft. Its weight smooths out the gaps between power strokes, its toothed outer ring is what the starter turns, and its edge has notches the crank sensor reads. The clutch bolts to its back face.",
+  specs:[["Ring gear","Turned by the starter"],["Timing notches","Read by the crank sensor"],["Clutch","Bolts to its rear face"]],
+  watch:"A worn clutch can score the flywheel face. It is usually resurfaced or replaced along with a new clutch.",
+  links:["crankshaft","starter","crankSensor","clutch"]},
+
+ {id:"camshaft",sys:"valvetrain",name:"Camshaft",ex:[0,0,-7],
+  what:"A long shaft in the block with eight egg-shaped lobes, one for each valve. As it turns, each lobe lifts its valve open and then lets it close. It turns at half the crankshaft's speed, because each valve opens once every two crank revolutions. A gear on the cam also drives the distributor and, through it, the oil pump.",
+  specs:[["Location","In the block, passenger side"],["Speed","Half of crank speed"],["Lobes","8 (4 intake, 4 exhaust)"],["Driven by","Timing chain"]],
+  watch:"Worn lobes cause a steady tick and a misfire that new plugs don't fix.",
+  links:["timingChain","valvetrain","distributor","oilPump","block"]},
+ {id:"timingChain",sys:"valvetrain",name:"Timing chain & sprockets",ex:[3,0,0],
+  what:"A roller chain that links the crankshaft to the camshaft so the valves open in step with the pistons. The cam sprocket has twice as many teeth as the crank sprocket, which makes the cam turn at half speed.",
+  specs:[["Ratio","2 : 1, crank to cam"],["Type","Single roller chain"]],
+  watch:"A stretched chain can rattle for a moment at startup and let the cam timing drift, which costs power.",
+  links:["crankshaft","camshaft","timingCover"]},
+ {id:"valvetrain",sys:"valvetrain",name:"Valves, pushrods & rockers",ex:[0,19,0],
+  what:"The chain of parts that opens the valves. A cam lobe pushes a lifter up, the lifter pushes a pushrod, the pushrod tips a rocker arm, and the rocker pushes the valve down and open. A spring closes it again. Intake valves let air and fuel in; exhaust valves let burned gas out.",
+  specs:[["Layout","Overhead valve (pushrod)"],["Lifters","Hydraulic, self-adjusting"],["Valves","4 intake, 4 exhaust"]],
+  watch:"Ticking from the top of the engine is often a lifter low on oil or a worn rocker. Check the oil level first.",
+  links:["camshaft","head","valveCover"]},
+
+ {id:"intakeManifold",sys:"airfuel",name:"Intake manifold",ex:[0,4,8],
+  what:"Four runners that carry air from the throttle body to each cylinder's intake port. It bolts to the driver side of the head and shares a gasket with the exhaust manifold just below it.",
+  specs:[["Runners","4, one per cylinder"],["Location","Driver side of the head"],["Gasket","Shared with the exhaust manifold"]],
+  watch:"A leaking gasket lets in air the computer didn't measure, which causes a high or rough idle and lean codes.",
+  links:["head","throttleBody","fuelRail","exhaustManifold"]},
+ {id:"throttleBody",sys:"airfuel",name:"Throttle body",ex:[0,5,13],
+  what:"The valve that controls how much air the engine breathes. The gas pedal opens a flat plate inside it. It carries the throttle position sensor, the idle air control motor that sets idle speed, and the manifold pressure (MAP) sensor that tells the computer how hard the engine is working.",
+  specs:[["Sensors","Throttle position, MAP"],["Idle control","Idle air control motor"],["Fed by","Air filter box"]],
+  watch:"Carbon around the plate and the idle air passage causes a rough or surging idle. Cleaning it often fixes the problem.",
+  links:["intakeManifold","fuelRail","pcm"]},
+ {id:"fuelRail",sys:"airfuel",name:"Fuel rail & injectors",ex:[0,8,11],
+  what:"A pipe that feeds pressurized fuel to four injectors, one aimed into each intake port. The computer opens each injector in firing order, timed to that cylinder's intake stroke.",
+  specs:[["Fuel pressure","About 49 psi"],["Injectors","4, fired in sequence"],["System","Returnless, regulator at the tank"]],
+  watch:"Long cranking before it starts can mean the pump is losing pressure. A clogged injector causes a misfire on one cylinder.",
+  links:["intakeManifold","throttleBody","fuelLines","pcm"]},
+
+ {id:"distributor",sys:"ignition",name:"Distributor",ex:[0,6,-8],
+  what:"Turned by a gear on the camshaft. A rotor inside the cap spins past a terminal for each cylinder and sends the coil's high-voltage pulse to the right spark plug wire, in firing order. It also houses the camshaft position sensor, and its shaft drives the oil pump.",
+  specs:[["Driven by","Camshaft gear"],["Sensor inside","Camshaft position sensor"],["Also drives","Oil pump"]],
+  watch:"A worn cap or rotor causes misfires, especially in damp weather. Look for burn marks or corrosion on the terminals.",
+  links:["camshaft","coil","sparkPlugs","oilPump"]},
+ {id:"coil",sys:"ignition",name:"Ignition coil",ex:[-2,9,-9],
+  what:"Turns 12 volts from the battery into the tens of thousands of volts needed to jump a spark plug gap. The engine computer switches it on and off for every spark, using the crank sensor to time it.",
+  specs:[["Input","12 V"],["Output","Sent through the distributor"],["Switched by","Engine computer (PCM)"]],
+  watch:"A weak coil causes misfires under load or once the engine is hot.",
+  links:["distributor","crankSensor","sparkPlugs","pcm"]},
+ {id:"sparkPlugs",sys:"ignition",name:"Spark plugs & wires",ex:[0,12,-6],
+  what:"Each plug makes the spark that lights the fuel and air in its cylinder. The wires carry high voltage from the distributor cap to the plugs, which thread into the passenger side of the head.",
+  specs:[["Plug gap","0.035 in"],["Location","Passenger side of the head"],["Firing order","1‑3‑4‑2"]],
+  watch:"Worn plugs or cracked wires cause misfires, a rough idle, and a flashing check-engine light.",
+  links:["head","distributor","coil","pistons"]},
+ {id:"crankSensor",sys:"ignition",name:"Crankshaft position sensor",ex:[-7,7,0],
+  what:"Bolted to the top of the transmission bellhousing, it reads the notches on the flywheel. It tells the engine computer how fast the engine is turning and where the pistons are, which the computer needs to time every spark and every squirt of fuel.",
+  specs:[["Reads","Notches on the flywheel"],["Location","Top of the bellhousing"],["If it fails","No spark and no fuel"]],
+  watch:"A classic Wrangler failure: the engine stalls once it's hot, then restarts after it cools down. Replacing the sensor is the usual fix.",
+  links:["flywheel","coil","fuelRail","pcm","transmission"]},
+
+ {id:"waterPump",sys:"cooling",name:"Water pump",ex:[9,0,0],
+  what:"A belt-driven pump with an impeller that pushes coolant through the block and head and out to the radiator. The fan bolts to its shaft.",
+  specs:[["Driven by","Serpentine belt"],["Location","Front of the engine"]],
+  watch:"Coolant dripping from the small weep hole, a wobbly pulley, or a whining bearing means it's on its way out.",
+  links:["belt","radiator","thermostat","fan","block"]},
+ {id:"thermostat",sys:"cooling",name:"Thermostat & housing",ex:[6,7,3],
+  what:"A valve that stays closed while the engine is cold so it warms up quickly, then opens to send coolant to the radiator. The upper radiator hose connects to its housing.",
+  specs:[["Opens at","About 195 °F (90 °C)"],["Location","Front of the head, driver side"]],
+  watch:"Stuck closed, the engine overheats. Stuck open, the heater blows lukewarm and fuel economy drops.",
+  links:["head","radiator","waterPump"]},
+ {id:"radiator",sys:"cooling",name:"Radiator & hoses",ex:[20,0,0],
+  what:"Hot coolant enters through the upper hose and runs through thin tubes lined with fins. Air flowing through the fins carries the heat away, and the cooled coolant returns to the water pump through the lower hose.",
+  specs:[["Upper hose","From the thermostat housing"],["Lower hose","To the water pump"],["Coolant","50/50 antifreeze and water"]],
+  watch:"Mud packed into the fins after a trail run blocks airflow and causes overheating. Rinse it out from the engine side.",
+  links:["waterPump","thermostat","fan","condenser","frame"]},
+ {id:"fan",sys:"cooling",name:"Cooling fan",ex:[15,0,0],
+  what:"Pulls air through the radiator, which matters most at low speeds and when crawling off-road. It mounts to the water pump through a viscous clutch that slips while the engine is cool and locks up as it gets hot.",
+  specs:[["Drive","Water pump shaft"],["Clutch","Viscous, temperature-sensing"]],
+  watch:"If the fan spins freely by hand with a hot engine switched off, the clutch is worn and the engine may run hot in traffic.",
+  links:["waterPump","radiator","condenser"]},
+
+ {id:"acCompressor",sys:"ac",name:"A/C compressor",ex:[5,-5,9],
+  what:"The pump of the A/C system. The serpentine belt turns its pulley all the time, but an electromagnetic clutch on the front only locks the pulley to the compressor when the A/C is on. It squeezes low-pressure refrigerant gas into hot, high-pressure gas and sends it to the condenser.",
+  specs:[["Refrigerant","R-134a"],["Drive","Serpentine belt, electromagnetic clutch"],["Location","Driver side, low on the front of the engine"]],
+  watch:"If the clutch's center plate doesn't spin with the A/C on, check the refrigerant charge and the clutch fuse and relay before blaming the compressor. Grinding or squealing points to internal wear.",
+  links:["belt","condenser","acLines","pdc"]},
+ {id:"condenser",sys:"ac",name:"A/C condenser",ex:[27,0,0],
+  what:"A thin radiator mounted in front of the engine radiator. Hot refrigerant from the compressor gives up its heat to the air flowing through it and condenses into a liquid.",
+  specs:[["Location","In front of the radiator"],["Changes","Hot gas into warm liquid"]],
+  watch:"Bent fins and packed mud cut airflow, so the A/C blows warm at idle. Rocks and gravel can puncture it; an oily spot on the fins marks a leak.",
+  links:["acCompressor","receiverDrier","radiator","fan"]},
+ {id:"receiverDrier",sys:"ac",name:"Receiver/drier",ex:[25,3,8],
+  what:"A small canister that stores spare liquid refrigerant and holds a bag of desiccant. The desiccant soaks up moisture, which would otherwise freeze in the expansion valve or mix with refrigerant to form acid.",
+  specs:[["Location","Beside the condenser, driver side"],["Holds","Liquid refrigerant and desiccant"]],
+  watch:"Replace it any time the system has been opened for repairs or left empty, because the desiccant soaks up moisture from the air.",
+  links:["condenser","acLines"]},
+ {id:"acLines",sys:"ac",name:"A/C lines & service ports",ex:[4,12,0],
+  what:"Aluminum lines with rubber sections carry the refrigerant. The smaller high-pressure line takes liquid to the firewall; the larger, cold suction line brings gas back to the compressor. Service ports on each side let a shop read pressures and recharge the system.",
+  specs:[["High side","Small liquid line, warm"],["Low side","Larger suction line, cold when working"],["Service ports","One high, one low"]],
+  watch:"Refrigerant carries oil, so an oily, dirty film at a fitting or hose crimp usually marks a leak.",
+  links:["acCompressor","receiverDrier","evaporator"]},
+
+ {id:"oilPan",sys:"lube",name:"Oil pan",xray:true,ex:[0,-17,0],
+  what:"The reservoir at the bottom of the engine. Oil drains back here after it has lubricated the engine, and the pump draws it up again. The drain plug sits at its lowest point.",
+  specs:[["Capacity","About 4 qt with filter (confirm on the dipstick)"],["Drain plug","Bottom of the sump"]],
+  watch:"It hangs low, so trail rocks can dent it. Seepage along the gasket edge is common on older engines.",
+  links:["oilPump","block","crankshaft"]},
+ {id:"oilPump",sys:"lube",name:"Oil pump",ex:[0,-11,0],
+  what:"A gear pump bolted to the bottom of the block, sitting down in the oil pan. It pulls oil through a screened pickup and pushes it through the filter to the crankshaft bearings, camshaft, and lifters. A shaft from the distributor gear drives it.",
+  specs:[["Type","Gear pump"],["Driven by","Distributor gear on the camshaft"],["Pickup","Screened tube in the pan"]],
+  watch:"If the oil pressure warning comes on while driving, shut the engine off right away. Low pressure ruins bearings in minutes.",
+  links:["oilPan","oilFilter","distributor","camshaft"]},
+ {id:"oilFilter",sys:"lube",name:"Oil filter",ex:[0,-2,-8],
+  what:"Cleans the oil after it leaves the pump and before it reaches the bearings. It screws onto the passenger side of the block.",
+  specs:[["Location","Passenger side of the block"],["Change","With every oil change"]],
+  watch:"If the old gasket sticks to the block and the new filter goes on over it, the doubled gasket will leak badly.",
+  links:["oilPump","block"]},
+
+ {id:"exhaustManifold",sys:"exhaust",name:"Exhaust manifold & downpipe",ex:[0,-3,10],
+  what:"Collects hot gas from the four exhaust ports and merges it into the downpipe, which leads to the catalytic converter. It sits on the driver side, just under the intake manifold.",
+  specs:[["Location","Driver side, below the intake"],["Leads to","Catalytic converter"]],
+  watch:"A cracked manifold or blown gasket makes a ticking noise that is loudest on a cold start and fades as it warms up.",
+  links:["head","intakeManifold","o2sensor","catalyticConverter"]},
+ {id:"o2sensor",sys:"exhaust",name:"Upstream oxygen sensor",ex:[0,-5,14],
+  what:"Measures how much oxygen is left in the exhaust before the catalytic converter. The engine computer uses that reading to fine-tune the fuel mixture many times a second.",
+  specs:[["Location","Downpipe, before the converter"],["Reports to","Engine computer (PCM)"]],
+  watch:"A slow or dead sensor lowers fuel economy and turns on the check-engine light.",
+  links:["exhaustManifold","fuelRail","pcm","catalyticConverter"]},
+
+ {id:"alternator",sys:"electrical",name:"Alternator",ex:[9,2,7],
+  what:"A belt-driven generator that recharges the battery and powers the lights, radio, and ignition once the engine is running.",
+  specs:[["Driven by","Serpentine belt"],["Charging voltage","About 13.5–14.5 V"]],
+  watch:"Dimming lights, a battery warning light, or a battery that keeps going flat point to the alternator or its wiring.",
+  links:["belt","battery","pdc"]},
+ {id:"starter",sys:"electrical",name:"Starter motor",ex:[-4,-4,-8],
+  what:"An electric motor that spins the flywheel to start the engine. When you turn the key (and press the clutch pedal, which closes a safety switch), its solenoid pushes a small gear into the flywheel's ring gear. It sits low on the passenger side at the back of the engine.",
+  specs:[["Engages","Flywheel ring gear"],["Location","Passenger side, rear"],["Interlock","Clutch pedal must be pressed"]],
+  watch:"A single click with no cranking usually means a weak battery, a loose cable, or a worn solenoid.",
+  links:["flywheel","battery","clutch"]},
+ {id:"psPump",sys:"steering",name:"Power steering pump",ex:[9,2,-7],
+  what:"A belt-driven pump on the front of the engine that pressurizes fluid for the steering gear box, which makes the steering wheel easier to turn.",
+  specs:[["Driven by","Serpentine belt"],["Location","Passenger side, front of engine"]],
+  watch:"A whine when you turn the wheel usually means low fluid. Check the reservoir and look for leaks at the hoses.",
+  links:["belt","steeringBox"]}
+];
+
+/* ---------- Chassis parts ---------- */
+const CHASSIS_PARTS = [
+ {id:"clutch",sys:"drivetrain",name:"Clutch & hydraulics",ex:[-10,-2,0],
+  what:"The clutch connects and disconnects the engine and transmission. A friction disc is clamped between the flywheel and a spring-loaded pressure plate. Pressing the pedal pushes fluid from the clutch master cylinder on the firewall to the slave cylinder at the bellhousing, which pulls the pressure plate back and frees the disc so you can shift.",
+  specs:[["Type","Single dry friction disc"],["Release","Hydraulic master and slave cylinders"],["Location","Inside the bellhousing"]],
+  watch:"Slipping under load (revs climb but speed doesn't), a soft or sinking pedal from a fluid leak, or chatter when pulling away.",
+  links:["flywheel","transmission","starter"]},
+ {id:"transmission",sys:"drivetrain",name:"AX5 transmission",xray:true,ex:[-16,0,0],
+  what:"An Aisin five-speed manual. Pairs of gears on the main shaft and countershaft trade engine speed for torque: low gears multiply torque to get moving, fourth turns the output at engine speed, and fifth is an overdrive that lets the engine run slower than the driveshaft on the highway. Pick a gear below the viewer to see the math.",
+  specs:[["1st","3.93 : 1"],["2nd","2.33 : 1"],["3rd","1.45 : 1"],["4th","1.00 : 1 (direct)"],["5th","0.85 : 1 (overdrive)"],["Reverse","4.74 : 1"]],
+  watch:"Grinding going into a gear points to worn synchronizers or a clutch that isn't fully releasing. Check for fluid leaks at the shifter and rear seals.",
+  links:["clutch","transferCase","crankSensor"]},
+ {id:"transferCase",sys:"drivetrain",name:"NP231 transfer case",xray:true,ex:[-24,-6,0],
+  what:"The New Process 231 Command-Trac splits power between the rear and front driveshafts. Its floor lever picks 2H for everyday driving, 4H for slippery roads, N, and 4L, a low gear that multiplies torque 2.72 times for crawling. It's part-time: 4H and 4L lock the front and rear together, so use them only on loose or slippery ground.",
+  specs:[["Ranges","2H · 4H · N · 4L"],["Low range","2.72 : 1"],["Type","Part-time, chain drive"]],
+  watch:"Driving in 4H on dry pavement makes the steering bind in turns and strains the driveline. Leaks at the rear output seal are common.",
+  links:["transmission","frontDriveshaft","rearDriveshaft","skidPlates"]},
+ {id:"frontDriveshaft",sys:"drivetrain",name:"Front driveshaft",ex:[0,-12,6],
+  what:"Carries power from the transfer case's front output to the front axle. A double-cardan joint at the transfer case end handles the steep angle. The TJ has no front axle disconnect, so this shaft spins whenever the Jeep moves, even in 2H when it carries no power.",
+  specs:[["Joints","Double-cardan at the transfer case, U-joint at the axle"],["In 2H","Spins along, carries no power"]],
+  watch:"Vibration that changes with speed, or a clunk when shifting into 4WD, can mean worn joints.",
+  links:["transferCase","frontAxle"]},
+ {id:"rearDriveshaft",sys:"drivetrain",name:"Rear driveshaft",ex:[0,-12,0],
+  what:"Carries power from the transfer case's rear output to the rear axle. A slip yoke lets its length change as the axle moves up and down.",
+  specs:[["Joints","U-joints at both ends"],["Slip yoke","At the transfer case"]],
+  watch:"Lifting a TJ steepens the driveshaft angle and often causes vibration. Leaks at the slip yoke seal.",
+  links:["transferCase","rearAxle"]},
+ {id:"frontAxle",sys:"drivetrain",name:"Front axle (Dana 30)",ex:[0,-16,0],
+  what:"A solid axle that carries the front wheels and steers them. Inside, the differential lets the left and right wheels turn at different speeds through corners. Steering knuckles at each end pivot on ball joints.",
+  specs:[["Model","Dana 30"],["Differential","Offset to the driver side"],["Gear ratio","Often 4.11 with the 2.5L; check the axle tag"],["Pivots","Upper and lower ball joints"]],
+  watch:"Worn ball joints or hub bearings cause wandering and clunks. A whine that changes with speed points to the differential gears.",
+  links:["frontDriveshaft","frontWheels","frontBrakes","frontArms","coils","tieRod"]},
+ {id:"rearAxle",sys:"drivetrain",name:"Rear axle (Dana 35)",ex:[0,-16,0],
+  what:"The rear axle drives the rear wheels in every range. The ring and pinion gears in the differential turn the power 90 degrees and reduce speed one final time before it reaches the wheels.",
+  specs:[["Model","Dana 35"],["Gear ratio","Matches the front axle"],["Brakes","Drums"]],
+  watch:"The Dana 35 is the weak link once bigger tires go on. Gear oil on the inside of a rear wheel means a leaking axle seal.",
+  links:["rearDriveshaft","rearWheels","rearBrakes","rearArms","coils"]},
+
+ {id:"frontWheels",sys:"wheels",name:"Front wheels & tires",ex:[0,-16,0],
+  what:"The front tires steer the Jeep and, in 4H or 4L, also pull it. Each wheel bolts to a hub on the front axle, with the disc brake rotor sandwiched behind it.",
+  specs:[["Stock tire","P205/75R15"],["Diameter","About 27 in"],["Wheel","15 in, 5 lugs on a 4.5 in circle"]],
+  watch:"Uneven wear on the inner or outer edge means the alignment (toe) is off. Check pressures cold.",
+  links:["frontAxle","frontBrakes","tieRod"]},
+ {id:"rearWheels",sys:"wheels",name:"Rear wheels & tires",ex:[0,-16,0],
+  what:"The rear tires push the Jeep in every range. Each full turn of a stock tire moves the Jeep about 85 inches, which is why tire size changes the speedometer and the effective gearing.",
+  specs:[["Stock tire","P205/75R15"],["Travel per turn","About 85 in"],["Wheel","15 in, 5 lugs on a 4.5 in circle"]],
+  watch:"After fitting larger tires, the speedometer reads low and the engine works harder unless the axle gears are changed.",
+  links:["rearAxle","rearBrakes"]},
+ {id:"spare",sys:"wheels",name:"Spare tire",ex:[-14,0,0],
+  what:"A full-size spare mounted on the tailgate. Rotating it into the other four keeps all five tires wearing evenly.",
+  specs:[["Mount","Tailgate carrier"],["Size","Matches the road wheels"]],
+  watch:"A heavy oversized spare can sag the tailgate hinges over time.",
+  links:["body","rearWheels"]},
+
+ {id:"coils",sys:"suspension",name:"Coil springs",ex:[0,-8,0],
+  what:"Four coil springs, one at each corner, hold up the Jeep's weight and let each axle move up and down over bumps. Jeep called this Quadra-Coil. It gave the TJ a much better ride and more axle travel than the leaf springs on the earlier Wrangler.",
+  specs:[["Springs","4 coils, one per corner"],["System","Quadra-Coil"]],
+  watch:"Sagging springs lower ride height. A broken coil makes one corner sit low.",
+  links:["frontAxle","rearAxle","shocks","frame"]},
+ {id:"shocks",sys:"suspension",name:"Shock absorbers",ex:[0,-8,0],
+  what:"Damp the springs so the Jeep doesn't keep bouncing after a bump. Each shock forces oil through small valves as it moves, turning motion into heat.",
+  specs:[["Count","4, one near each spring"],["Type","Gas-charged hydraulic"]],
+  watch:"Oil on the shock body or a floaty, bouncy ride over dips means it's worn.",
+  links:["coils","frontAxle","rearAxle"]},
+ {id:"frontArms",sys:"suspension",name:"Front control arms",ex:[0,-12,0],
+  what:"Four arms, two upper and two lower, tie the front axle to the frame. They keep the axle from moving forward or back and hold its angle (caster) steady as it moves up and down.",
+  specs:[["Count","2 upper, 2 lower"],["Ends","Rubber bushings"]],
+  watch:"Worn bushings cause clunks and vague steering, and can add to front-end shake.",
+  links:["frontAxle","frame","trackBars"]},
+ {id:"rearArms",sys:"suspension",name:"Rear control arms",ex:[0,-12,0],
+  what:"Two upper and two lower arms locate the rear axle front to back and keep the pinion pointed at the driveshaft as the axle moves.",
+  specs:[["Count","2 upper, 2 lower"],["Ends","Rubber bushings"]],
+  watch:"Torn bushings let the axle shift under power, which you feel as a clunk when getting on and off the gas.",
+  links:["rearAxle","frame","trackBars"]},
+ {id:"trackBars",sys:"suspension",name:"Track bars",ex:[0,-10,0],
+  what:"One bar on each axle running side to side, from the axle on one side to the frame on the other. It keeps the axle centered under the Jeep as the springs compress.",
+  specs:[["Count","1 front, 1 rear"],["Front","Axle passenger side to frame driver side"]],
+  watch:"A loose front track bar is a leading cause of death wobble, a violent shake of the front end after hitting a bump at speed.",
+  links:["frontAxle","rearAxle","frame"]},
+ {id:"swayBars",sys:"suspension",name:"Sway bars",ex:[0,-6,0],
+  what:"Spring-steel bars that link the left and right sides. They twist to resist body lean in corners. On the trail, many owners unhook the front end links so each wheel can droop further.",
+  specs:[["Count","Front and rear"],["Connects","Axle to frame through end links"]],
+  watch:"Clunks over small bumps often come from worn end links or bushings.",
+  links:["frontAxle","rearAxle","frame"]},
+
+ {id:"steeringBox",sys:"steering",name:"Steering gear box",ex:[6,6,6],
+  what:"A power-assisted recirculating-ball gear bolted to the driver side frame rail. It turns the spin of the steering shaft into the swing of the pitman arm, with hydraulic help from the power steering pump.",
+  specs:[["Type","Recirculating ball, power assisted"],["Mount","Driver side frame rail"]],
+  watch:"Play in the steering wheel can come from the box. On hard-used Jeeps, check the frame around the box mount for cracks.",
+  links:["psPump","dragLink","steeringColumn","frame"]},
+ {id:"dragLink",sys:"steering",name:"Pitman arm & drag link",ex:[8,-14,0],
+  what:"The pitman arm hangs from the steering box and swings when you turn the wheel. The drag link carries that motion across to the tie rod near the passenger side knuckle.",
+  specs:[["Connects","Steering box to tie rod"],["Ends","Ball-joint tie rod ends"]],
+  watch:"Worn tie rod ends make the steering feel loose. Grab the link and shake it to feel for play.",
+  links:["steeringBox","tieRod"]},
+ {id:"tieRod",sys:"steering",name:"Tie rod & steering damper",ex:[4,-22,0],
+  what:"The tie rod links the two front knuckles so both wheels turn together. The steering damper is a small shock absorber that soaks up kicks from rocks and ruts before they reach the steering wheel.",
+  specs:[["Connects","Driver knuckle to passenger knuckle"],["Damper","Between tie rod and axle"]],
+  watch:"A bent tie rod throws off the alignment. A new damper can hide death wobble but won't cure its real cause.",
+  links:["dragLink","frontAxle","frontWheels"]},
+ {id:"steeringColumn",sys:"steering",name:"Steering column & shaft",ex:[-6,10,0],
+  what:"Connects the steering wheel through the firewall to the steering box. An intermediate shaft with universal joints lets the shaft bend around the engine bay.",
+  specs:[["Joints","Universal joints on the intermediate shaft"],["Also carries","Turn signal and wiper switches"]],
+  watch:"A clunk you can feel in the wheel while turning often comes from a worn intermediate shaft joint.",
+  links:["steeringBox","body"]},
+
+ {id:"booster",sys:"brakes",name:"Brake booster & master cylinder",ex:[6,10,8],
+  what:"The vacuum booster uses engine intake vacuum to multiply the force of your foot. The master cylinder turns that push into hydraulic pressure, with separate front and rear circuits so one leak can't take out all of the braking.",
+  specs:[["Assist","Engine vacuum"],["Circuits","Split front and rear"],["Location","Driver side firewall"]],
+  watch:"A hard pedal means the booster has lost vacuum. A pedal that slowly sinks under steady pressure means an internal leak.",
+  links:["brakeLines","frontBrakes","rearBrakes","body"]},
+ {id:"brakeLines",sys:"brakes",name:"Brake lines & hoses",ex:[0,-4,0],
+  what:"Steel lines run along the frame from the master cylinder to each axle, where flexible rubber hoses let the axles move. A combination valve balances pressure between front and rear.",
+  specs:[["Frame lines","Steel tubing"],["At the axles","Flexible rubber hoses"],["Valve","Front/rear combination valve"]],
+  watch:"Rust on the steel lines, especially in road-salt states, and cracked or swollen hoses. Lifted Jeeps need longer hoses.",
+  links:["booster","frontBrakes","rearBrakes","frame"]},
+ {id:"frontBrakes",sys:"brakes",name:"Front disc brakes",ex:[0,-16,0],
+  what:"A caliper squeezes two pads against a rotor that spins with the wheel. The front brakes do most of the stopping, because weight shifts forward when you brake.",
+  specs:[["Type","Disc, single-piston sliding caliper"],["Location","Behind each front wheel"]],
+  watch:"A squeal from the wear indicator means the pads are thin. A pulsing pedal points to warped rotors.",
+  links:["frontWheels","frontAxle","brakeLines"]},
+ {id:"rearBrakes",sys:"brakes",name:"Rear drum brakes",ex:[0,-16,0],
+  what:"Inside each drum, a wheel cylinder pushes two curved shoes outward against the spinning drum. The parking brake uses the same shoes through cables.",
+  specs:[["Type","Drum with self-adjusters"],["Also used by","Parking brake"]],
+  watch:"Seized self-adjusters cause a low pedal. A leaking wheel cylinder leaves brake fluid on the inside of the tire.",
+  links:["rearWheels","rearAxle","brakeLines","parkingBrake"]},
+ {id:"parkingBrake",sys:"brakes",name:"Parking brake",ex:[0,-8,0],
+  what:"A hand lever in the center console pulls cables to the rear drum shoes, holding the Jeep without hydraulic pressure.",
+  specs:[["Lever","Center console"],["Acts on","Rear drum shoes"]],
+  watch:"Cables seize from mud and water on Jeeps that go off-road. Use it regularly so it keeps working.",
+  links:["rearBrakes"]},
+
+ {id:"frame",sys:"frame",name:"Frame",ex:[0,0,0],
+  what:"A steel ladder frame: two long boxed rails tied together by crossmembers. The body, engine, transmission, suspension, and bumpers all mount to it.",
+  specs:[["Wheelbase","93.4 in"],["Track","58 in"],["Construction","Ladder frame with boxed rails"]],
+  watch:"Rust where mud collects, especially near the rear control arm mounts and rear crossmember. Inspect with a hammer, not just your eyes.",
+  links:["body","skidPlates","bumpers","coils","steeringBox"]},
+ {id:"skidPlates",sys:"frame",name:"Skid plates",ex:[0,-14,0],
+  what:"Heavy steel plates protect the underside. The transmission and transfer case skid plate doubles as a frame crossmember that holds up the back of the drivetrain, and a second plate shields the fuel tank.",
+  specs:[["Front plate","Transmission and transfer case, also a crossmember"],["Rear plate","Fuel tank"]],
+  watch:"Dents are normal. A bent transmission skid plate can change driveline angles and cause vibration.",
+  links:["transferCase","fuelTank","frame"]},
+ {id:"bumpers",sys:"frame",name:"Bumpers",ex:[0,-6,0],
+  what:"Steel bumpers bolt to the front and rear ends of the frame. The front one carries tow hooks for recovery.",
+  specs:[["Mount","Frame rail ends"],["Front","Tow hooks"]],
+  watch:"Check the frame where the bumper bolts on if the Jeep has been pulled hard by its tow hooks.",
+  links:["frame"]},
+ {id:"body",sys:"frame",name:"Body tub, hood & fenders",xray:true,xop:.12,ex:[0,45,0],
+  what:"The steel body tub sits on rubber body mounts on the frame. The doors and top come off, the windshield folds down, and a roll bar protects the people inside.",
+  specs:[["Mounting","Rubber body mounts on the frame"],["Removable","Doors, top, and folding windshield"]],
+  watch:"Rust in the floor pans and at the body mounts, especially when water sits under the carpet.",
+  links:["frame","steeringColumn","booster","lights","spare"]},
+
+ {id:"fuelTank",sys:"airfuel",name:"Fuel tank & pump module",ex:[0,-8,0],
+  what:"A plastic tank tucked between the rear frame rails behind the axle, shielded by a skid plate. The electric fuel pump, fuel level sender, filter, and pressure regulator all live in one module on top of the tank.",
+  specs:[["Material","Plastic"],["Pressure","About 49 psi, set in the tank"],["Location","Behind the rear axle"]],
+  watch:"A loud whine from the rear or long cranking before starting can mean the pump is wearing out.",
+  links:["fuelLines","skidPlates"]},
+ {id:"fuelLines",sys:"airfuel",name:"Fuel line",ex:[0,-4,6],
+  what:"Carries fuel along the frame from the tank to the fuel rail on the engine. The system is returnless, so there is only a supply line and no return line.",
+  specs:[["Route","Along the driver side frame rail"],["Type","Supply only (returnless)"]],
+  watch:"Rubbed-through lines near the frame and rusty fittings on older Jeeps. Any smell of raw fuel needs attention right away.",
+  links:["fuelTank","fuelRail"]},
+
+ {id:"evaporator",sys:"ac",name:"Evaporator, blower & heater box",xray:true,xop:.3,ex:[-8,10,-12],
+  what:"Behind the dash on the passenger side. At the firewall, an expansion valve meters liquid refrigerant into the evaporator, where it boils and pulls heat out of the cab air. The blower fan pushes air across it. The heater core sits in the same box, and doors inside mix the two for whatever temperature you pick. Moisture from the air condenses on the cold fins and drains out under the Jeep.",
+  specs:[["Location","Under the dash, passenger side"],["Metering","Expansion valve at the firewall"],["Also holds","Blower fan and heater core"]],
+  watch:"A musty smell from the vents means mold on the evaporator. A puddle of clear water under the passenger side with the A/C on is normal.",
+  links:["acLines","body","pdc"]},
+
+ {id:"catalyticConverter",sys:"exhaust",name:"Catalytic converter",ex:[0,-10,-6],
+  what:"A honeycomb coated with precious metals that turns the most harmful exhaust gases into water vapor, carbon dioxide, and nitrogen. A second oxygen sensor behind it checks that it's working.",
+  specs:[["Location","Under the passenger side, behind the transmission"],["Sensor","Downstream oxygen sensor"]],
+  watch:"A rattle from underneath is often a loose heat shield. A rotten-egg smell or code P0420 points to a failing converter.",
+  links:["exhaustManifold","o2sensor","muffler","pcm"]},
+ {id:"muffler",sys:"exhaust",name:"Muffler & tailpipe",ex:[0,-10,-8],
+  what:"Chambers inside the muffler cancel out pressure pulses to quiet the engine. The tailpipe then carries exhaust out past the rear axle.",
+  specs:[["Location","Ahead of the rear axle"]],
+  watch:"Holes rusting through the muffler make the exhaust loud and can let fumes in under the tub.",
+  links:["catalyticConverter"]},
+
+ {id:"battery",sys:"electrical",name:"Battery & cables",ex:[0,14,8],
+  what:"A 12-volt battery that powers the starter and the computer before the engine runs. The heavy positive cable runs to the starter, and the negative cable grounds to the engine block.",
+  specs:[["Voltage","12 V"],["Location","Driver side of the engine bay"]],
+  watch:"Corroded terminals cause slow cranking or no-starts. Clean them and check that the hold-down is tight.",
+  links:["starter","alternator","pdc"]},
+ {id:"pdc",sys:"electrical",name:"Power distribution center",ex:[0,12,6],
+  what:"The under-hood fuse and relay box. Power from the battery splits here into fused circuits for the fuel pump, cooling, lights, and the engine computer.",
+  specs:[["Holds","Fuses and relays"],["Location","Next to the battery"]],
+  watch:"If the fuel pump or another circuit goes dead, check its fuse and swap in a matching relay to test.",
+  links:["battery","pcm","lights","fuelTank"]},
+ {id:"pcm",sys:"electrical",name:"Engine computer (PCM)",ex:[0,10,-8],
+  what:"The powertrain control module reads the crank, cam, oxygen, throttle, and pressure sensors and decides when to fire each injector and spark. It stores trouble codes you can read through the diagnostic port under the dash.",
+  specs:[["Controls","Fuel injectors, spark timing, idle"],["Diagnostics","OBD-II port under the dash"]],
+  watch:"When the check-engine light comes on, read the code first. It points to the circuit that needs attention.",
+  links:["crankSensor","o2sensor","fuelRail","throttleBody","coil","pdc"]},
+ {id:"lights",sys:"electrical",name:"Lights & wiring harness",ex:[10,6,0],
+  what:"Round headlights up front, taillights at the rear corners, and a wiring harness running along the frame to tie them together.",
+  specs:[["Headlights","Round sealed beams"],["Harness","Along the driver side frame rail"]],
+  watch:"Water and mud in the taillight sockets and harness plugs cause flickering lights.",
+  links:["pdc","body"]}
+];
+
+ENGINE_PARTS.forEach(p=>p.area="engine");
+CHASSIS_PARTS.forEach(p=>p.area="chassis");
+const PARTS = ENGINE_PARTS.concat(CHASSIS_PARTS);
+const BY = {}; PARTS.forEach(p=>BY[p.id]=p);
+
+/* ---------- Three.js setup ---------- */
+const vp = document.getElementById("vp");
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+vp.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38,1,0.5,1500);
+const CAMS = {
+  jeep:{pos:new V(120,78,150),tgt:new V(0,24,0),ch:new V(230,170,280)},
+  engine:{pos:ENG.clone().add(new V(4,26,52)),tgt:ENG.clone().add(new V(1,5,0)),ch:ENG.clone().add(new V(52,40,60))}
+};
+camera.position.copy(CAMS.jeep.pos);
+scene.add(new THREE.HemisphereLight(0xffffff,0x3a4652,0.85));
+const key = new THREE.DirectionalLight(0xffffff,0.85); key.position.set(60,120,80); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff,0.35); fill.position.set(-80,40,-60); scene.add(fill);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.copy(CAMS.jeep.tgt); controls.enableDamping = true; controls.dampingFactor = 0.09;
+controls.minDistance = 10; controls.maxDistance = 520;
+
+let grid=null;
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";}
+const ACCENT = new THREE.Color("#f0b030");
+function applyTheme(){
+  scene.background = new THREE.Color(cssVar("--viewport")); ACCENT.set(cssVar("--accent"));
+  const vis = grid?grid.visible:true; if(grid) scene.remove(grid);
+  const c=new THREE.Color(cssVar("--line"));
+  grid=new THREE.GridHelper(320,32,c,c); grid.position.y=-0.05; grid.visible=vis; scene.add(grid);
+  applyLook();
+}
+
+/* ---------- Builders ---------- */
+const pickables = [];
+function maker(part){
+  const base = new THREE.Color(SYS[part.sys].color);
+  const H = {
+    m(dl, o){o=o||{}; const c=base.clone(); if(o.color) c.set(o.color); else if(dl) c.offsetHSL(0,0,dl);
+      const m=new THREE.MeshStandardMaterial({color:c,metalness:o.metal!=null?o.metal:0.3,roughness:o.rough!=null?o.rough:0.55});
+      if(o.double) m.side=THREE.DoubleSide;
+      part.mats.push(m); return m;},
+    add(geo,m,x,y,z,parent,edges){const mesh=new THREE.Mesh(geo,m); mesh.position.set(x,y,z); mesh.userData.pid=part.id;
+      (parent||part.group).add(mesh); pickables.push(mesh);
+      if(edges!==false) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo,30),part.lineMat));
+      return mesh;},
+    box(m,w,h,d,x,y,z,parent){return H.add(new THREE.BoxGeometry(w,h,d),m,x,y,z,parent);},
+    ab(m,x0,x1,y0,y1,z0,z1,parent){return H.box(m,Math.abs(x1-x0),Math.abs(y1-y0),Math.abs(z1-z0),(x0+x1)/2,(y0+y1)/2,(z0+z1)/2,parent);},
+    cyl(m,r,len,axis,x,y,z,o){o=o||{}; const g=new THREE.CylinderGeometry(o.r2!=null?o.r2:r,r,len,o.seg||28,1,!!o.open);
+      if(axis==="x") g.rotateZ(Math.PI/2); else if(axis==="z") g.rotateX(Math.PI/2);
+      return H.add(g,m,x,y,z,o.parent,o.edges);},
+    rod(m,a,b,r,o){o=o||{}; const A=new V(a[0],a[1],a[2]), B=new V(b[0],b[1],b[2]), d=B.clone().sub(A), L=d.length();
+      const mesh=H.add(new THREE.CylinderGeometry(r,r,L,o.seg||14),m,(A.x+B.x)/2,(A.y+B.y)/2,(A.z+B.z)/2,o.parent,o.edges);
+      mesh.quaternion.setFromUnitVectors(new V(0,1,0),d.normalize()); return mesh;},
+    tube(m,pts,r,o){o=o||{}; const c=new THREE.CatmullRomCurve3(pts.map(p=>new V(p[0],p[1],p[2])),!!o.closed,"centripetal");
+      return H.add(new THREE.TubeGeometry(c,o.seg||64,r,10,!!o.closed),m,0,0,0,o.parent,false);},
+    torus(m,R,t,axis,x,y,z,o){o=o||{}; const g=new THREE.TorusGeometry(R,t,o.rs||10,o.ts||56);
+      if(axis==="x") g.rotateY(Math.PI/2); else if(axis==="y") g.rotateX(Math.PI/2);
+      return H.add(g,m,x,y,z,o.parent,false);},
+    sphere(m,r,x,y,z,o){o=o||{}; return H.add(new THREE.SphereGeometry(r,o.seg||16,12),m,x,y,z,o.parent,false);},
+    helix(m,x,y0,z,h,R,turns,wire){const pts=[],n=turns*16; for(let i=0;i<=n;i++){const t=i/n*turns*Math.PI*2; pts.push([x+R*Math.cos(t),y0+h*i/n,z+R*Math.sin(t)]);}
+      return H.tube(m,pts,wire,{seg:n*3});},
+    pivot(x,y,z,parent){const g=new THREE.Group(); g.position.set(x,y,z); (parent||part.group).add(g); return g;},
+    sub(g,v){part.subs.push({g,base:g.position.clone(),v:new V(v[0],v[1],v[2])}); return g;}
+  };
+  return H;
+}
+function hull2(P){P=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[],up=[];
+  for(const p of P){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
+  for(let i=P.length-1;i>=0;i--){const p=P[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
+  up.pop();lo.pop();return lo.concat(up);}
+function circlePts(cy,cz,r,n){const a=[];for(let i=0;i<n;i++){const t=i/n*Math.PI*2;a.push([cy+r*Math.cos(t),cz+r*Math.sin(t)]);}return a;}
+const RUBBER = {color:"#2a2e33",rough:0.9,metal:0.05};
+const SIDES = [1,-1];
+
+function wheelAt(H,mats,x,y,z,side,parent){
+  const pv=H.pivot(x,y,z,parent);
+  H.torus(mats.tire,9.8,3.7,"z",0,0,0,{parent:pv,rs:14,ts:48});
+  H.cyl(mats.rim,7.4,7,"z",0,0,0,{parent:pv,open:true,seg:32});
+  H.cyl(mats.rim,7.3,.4,"z",0,0,side*2.6,{parent:pv,seg:32});
+  for(let k=0;k<5;k++){const t=k/5*Math.PI*2; H.cyl(mats.lug,.45,.6,"z",2.4*Math.cos(t),2.4*Math.sin(t),side*3.0,{parent:pv,seg:6,edges:false});}
+  for(let k=0;k<6;k++){const t=k/6*Math.PI*2+.3; H.cyl(mats.lug,.9,.3,"z",5*Math.cos(t),5*Math.sin(t),side*2.85,{parent:pv,seg:10,edges:false});}
+  H.cyl(mats.lug,1.3,.5,"z",0,0,side*3.0,{parent:pv,seg:16});
+  return pv;
+}
+function wheelMats(H){return {tire:H.m(0,{color:"#26292c",rough:.95,metal:0}),rim:H.m(0,{color:"#c4cad0",metal:.75,rough:.3,double:true}),lug:H.m(0,{color:"#7d858d",metal:.8,rough:.3})};}
+function shaftAt(H,m,m2,a,b,r){
+  const A=new V(a[0],a[1],a[2]), B=new V(b[0],b[1],b[2]), d=B.clone().sub(A), L=d.length();
+  const g=H.pivot(A.x,A.y,A.z); g.quaternion.setFromUnitVectors(new V(0,0,1),d.normalize());
+  const sp=H.pivot(0,0,0,g);
+  H.cyl(m,r,L-2,"z",0,0,L/2,{parent:sp,seg:20});
+  H.box(m2,r*3.4,.6,1.6,0,0,.8,sp); H.box(m2,.6,r*3.4,1.6,0,0,L-.8,sp);
+  H.box(m2,.5,r*2.6,.5,0,0,L*.35,sp);
+  return sp;
+}
+
+const BUILD = {
+ /* engine (engine-local coordinates) */
+ block(H){const m=H.m(0,{metal:.2,rough:.8}), m2=H.m(-.08,{metal:.2,rough:.8});
+   H.box(m,19,10.7,7.2,0,3.85,0); H.box(m2,17,1.2,1.6,0,CAM_Y,-4.2); H.box(m2,3,2.2,1,-1,2.6,4.1);
+   CYL_X.forEach(x=>H.torus(m2,1.95,.07,"y",x,9.2,0));
+   H.box(m2,3,2,6.4,1,1,8.5); H.box(m2,3,2,6.4,1,1,-8.9);},
+ headGasket(H){const m=H.m(.1,{metal:.7,rough:.35}); H.box(m,19,.12,7.4,0,9.26,0);
+   CYL_X.forEach(x=>H.torus(H.m(.2,{metal:.8,rough:.3}),1.98,.09,"y",x,9.3,0));},
+ head(H){const m=H.m(.05,{metal:.2,rough:.75}); H.box(m,19,4,7.6,0,11.3,0);
+   CYL_X.forEach(x=>{H.box(m,1.5,1.3,.3,x,10.0,3.9); H.box(m,1.5,1.3,.3,x,11.6,3.9);});},
+ valveCover(H){const m=H.m(-.05,{metal:.5,rough:.4}), cap=H.m(0,RUBBER);
+   H.box(m,18,2.1,6.8,0,14.4,0); H.box(m,15,.4,4,0,15.65,0); H.cyl(cap,.8,.6,"y",5,16.1,1);},
+ timingCover(H){const m=H.m(.03,{metal:.4,rough:.5}); H.box(m,.9,9,8,9.95,3,-.8); H.torus(H.m(0,RUBBER),1.0,.18,"x",10.45,0,0);},
+ belt(H){const m=H.m(-.05,{metal:.6,rough:.4}), m2=H.m(-.2,{metal:.6}), rub=H.m(0,RUBBER);
+   H.cyl(m,3,1,"x",12.6,0,0,{seg:48}); H.cyl(m2,1,.6,"x",13.3,0,0,{seg:20});
+   H.cyl(m2,1,.6,"x",12.6,5.9,4.3,{seg:24}); H.box(m2,.4,2.4,.6,12.0,4.8,3.4);
+   const pts=[[-3,0],[-2.1,2.1],[-0.6,5.3],[0.8,8.3],[2.5,8.75],[4.2,8.2],[4.9,6.9],[5.9,5.3],[7.2,6.2],[8.0,6.75],[9.6,6.8],[10.5,5.8],[10.2,4.9],[8.6,2.0],[8.5,0],[8.6,-2.0],[10.0,-4.4],[10.7,-5.5],[10.2,-6.7],[9,-7.2],[7.6,-6.6],[2.0,-2.9],[0,-3.0],[-2.1,-2.1]];
+   H.tube(rub,pts.map(q=>[12.6,q[0],q[1]]),.22,{closed:true,seg:240});},
+ crankshaft(H,p){const m=H.m(0,{metal:.75,rough:.3}), m2=H.m(-.1,{metal:.7,rough:.35});
+   const rot=H.pivot(0,0,0); p.anim.rot=rot;
+   [8.8,4.4,0,-4.4,-8.8].forEach(x=>H.cyl(m,1.25,1.3,"x",x,0,0,{parent:rot}));
+   CYL_X.forEach((x,i)=>{const a=THROW[i];
+     H.cyl(m,1.05,1.3,"x",x,CR*Math.cos(a),CR*Math.sin(a),{parent:rot});
+     H.box(m2,.6,5.4,2.8,x+.95,0,0,rot); H.box(m2,.6,5.4,2.8,x-.95,0,0,rot);});
+   H.cyl(m,.8,3,"x",10.9,0,0,{parent:rot}); H.cyl(m2,2.1,.6,"x",-9.8,0,0,{parent:rot});},
+ pistons(H,p){const mp=H.m(.15,{metal:.6,rough:.35}), mr=H.m(-.06,{metal:.5,rough:.4}), ring=H.m(-.25,{metal:.6});
+   p.anim.list=[];
+   CYL_X.forEach((x,i)=>{const pg=H.pivot(x,0,0);
+     H.cyl(mp,1.92,2.6,"y",0,.3,0,{parent:pg,seg:32});
+     H.torus(ring,1.93,.05,"y",0,1.25,0,{parent:pg}); H.torus(ring,1.93,.05,"y",0,.95,0,{parent:pg});
+     const rg=H.pivot(x,0,0);
+     H.box(mr,.55,ROD,.4,0,ROD/2,0,rg); H.cyl(mr,.8,.9,"x",0,0,0,{parent:rg}); H.cyl(mr,.45,.9,"x",0,ROD,0,{parent:rg});
+     p.anim.list.push({pg,rg,i});});},
+ flywheel(H,p){const m=H.m(-.05,{metal:.7,rough:.35}), m2=H.m(-.18,{metal:.7,rough:.4});
+   const pv=H.pivot(-10.6,0,0); p.anim.rot=pv;
+   H.cyl(m,6,.9,"x",0,0,0,{parent:pv,seg:56}); H.torus(m2,6.05,.28,"x",0,0,0,{parent:pv});
+   for(let k=0;k<6;k++){const t=k/6*Math.PI*2; H.cyl(m2,.25,.3,"x",.55,1.4*Math.cos(t),1.4*Math.sin(t),{parent:pv,seg:10,edges:false});}
+   for(let k=0;k<8;k++){const t=k/8*Math.PI*2+.2; H.cyl(m2,.32,.3,"x",-.55,5.1*Math.cos(t),5.1*Math.sin(t),{parent:pv,seg:10,edges:false});}},
+ camshaft(H,p){const m=H.m(0,{metal:.7,rough:.3}), m2=H.m(-.1,{metal:.7,rough:.35});
+   const pv=H.pivot(0,CAM_Y,CAM_Z); p.anim.rot=pv;
+   H.cyl(m,.42,19.2,"x",.3,0,0,{parent:pv});
+   [8.8,4.4,0,-4.4,-8.8].forEach(x=>H.cyl(m2,.95,.7,"x",x,0,0,{parent:pv}));
+   CYL_X.forEach((x,i)=>{[[.85,270],[-.85,450]].forEach(([dx,c])=>{const A=-(PHASE[i]+c)*Math.PI/360;
+     H.cyl(m2,.62,.5,"x",x+dx,.28*Math.cos(A),.28*Math.sin(A),{parent:pv});});});
+   H.cyl(m2,.85,.5,"x",-0.5,0,0,{parent:pv,seg:18});},
+ timingChain(H){const m=H.m(0,{metal:.7,rough:.35}), m2=H.m(-.15,{metal:.6});
+   H.cyl(m2,1.1,.4,"x",9.95,0,0,{seg:20}); H.cyl(m2,2.2,.4,"x",9.95,CAM_Y,CAM_Z,{seg:30});
+   const h=hull2(circlePts(0,0,1.25,40).concat(circlePts(CAM_Y,CAM_Z,2.35,60)));
+   H.tube(m,h.map(q=>[9.95,q[0],q[1]]),.16,{closed:true,seg:220});},
+ valvetrain(H,p){const m=H.m(.05,{metal:.7,rough:.3}), m2=H.m(-.12,{metal:.6,rough:.4}), sp=H.m(.15,{metal:.5});
+   p.anim.valves=[];
+   CYL_X.forEach((x,i)=>{H.box(m2,2.6,.35,.5,x,14.75,-1.1);
+     [[.85,180],[-.85,360]].forEach(([dx,open])=>{const vx=x+dx;
+       const vg=H.pivot(vx,0,0);
+       H.cyl(m,.72,.16,"y",0,9.55,0,{parent:vg,r2:.5}); H.cyl(m,.14,4.9,"y",0,12.0,0,{parent:vg,seg:10,edges:false});
+       H.cyl(m2,.42,.15,"y",0,14.1,0,{parent:vg}); H.cyl(sp,.42,1.2,"y",vx,13.4,0,{seg:14});
+       const pg=H.pivot(vx,0,CAM_Z);
+       H.cyl(m2,.36,1.0,"y",0,5.6,0,{parent:pg,seg:14}); H.cyl(m,.13,8.4,"y",0,10.4,0,{parent:pg,seg:8,edges:false});
+       const rk=H.pivot(vx,14.75,-1.1); H.box(m,.36,.32,2.6,0,0,0,rk);
+       p.anim.valves.push({vg,pg,rk,i,open});});});},
+ intakeManifold(H){const m=H.m(0,{metal:.45,rough:.45}), m2=H.m(-.12,{metal:.4});
+   CYL_X.forEach(x=>H.box(m,1.7,1.6,2.8,x,11.6,5.2));
+   H.cyl(m,1.5,15.6,"x",0,11.4,7.4,{seg:32}); H.box(m2,18,1.5,.3,0,11.6,3.95);},
+ throttleBody(H){const m=H.m(.05,{metal:.6,rough:.35}), m2=H.m(-.15,{metal:.3});
+   H.cyl(m,1.2,1.8,"z",0,11.4,9.7); H.cyl(m2,1.5,.25,"z",0,11.4,8.85); H.cyl(m,1.35,.5,"z",0,11.4,10.8,{r2:1.5});
+   H.box(m2,.9,1.0,.5,1.45,11.4,9.7); H.box(m2,.8,.8,.9,-1.4,11.0,9.7); H.box(m2,1.0,.45,.8,0,12.8,9.7);},
+ fuelRail(H){const m=H.m(.05,{metal:.7,rough:.3}), m2=H.m(-.15,{metal:.3,rough:.5});
+   H.cyl(m,.38,16,"x",0,13.1,5.4,{seg:16}); CYL_X.forEach(x=>H.cyl(m2,.32,1.3,"y",x,12.6,5.4,{seg:14}));
+   H.tube(m2,[[-8,13.1,5.4],[-10.5,12.6,6.4],[-12.5,10,6.8],[-13,6,6.8]],.2);},
+ distributor(H){const m=H.m(0,{metal:.2,rough:.6}), body=H.m(0,{color:"#9aa3ab",metal:.6,rough:.4}), dark=H.m(0,RUBBER);
+   H.cyl(body,.85,3.4,"y",DIST.x,6.6,DIST.z); H.cyl(m,1.25,1.2,"y",DIST.x,8.9,DIST.z,{r2:1.1,seg:32});
+   TERM_ANGLE.forEach(a=>{const t=a*Math.PI/180; H.cyl(dark,.16,.5,"y",DIST.x+.75*Math.cos(t),DIST.top,DIST.z+.75*Math.sin(t),{seg:10,edges:false});});
+   H.cyl(dark,.18,.5,"y",DIST.x,DIST.top,DIST.z,{seg:10,edges:false}); H.box(body,1.6,.3,.6,DIST.x,5.1,-4.9);},
+ coil(H){const m=H.m(-.05,{metal:.2,rough:.6}), dark=H.m(0,RUBBER);
+   H.box(m,1.6,2.2,1.6,-4.2,7.4,-6.0); H.cyl(dark,.35,.8,"y",-4.2,8.9,-6.0,{seg:12}); H.box(dark,.3,2.6,1.2,-4.2,7.4,-5.1);
+   H.tube(dark,[[-4.2,9.3,-6],[-3.2,10.6,-6.5],[-1.5,10.8,-6.0],[DIST.x,10.2,DIST.z]],.14);},
+ sparkPlugs(H,p){const steel=H.m(0,{color:"#b9c0c7",metal:.8,rough:.3}), ins=H.m(0,{color:"#f1efe9",metal:0,rough:.4}), boot=H.m(-.05,{metal:.1,rough:.7});
+   p.anim.sparks=[];
+   CYL_X.forEach((x,i)=>{
+     H.cyl(steel,.28,2.2,"z",x,10.2,-2.7,{seg:12,edges:false}); H.cyl(steel,.5,.7,"z",x,10.2,-4.15,{seg:6});
+     H.cyl(ins,.3,1.0,"z",x,10.2,-5.0,{seg:14}); H.cyl(boot,.45,1.2,"z",x,10.2,-5.9,{seg:14});
+     const t=TERM_ANGLE[i]*Math.PI/180, tx=DIST.x+.75*Math.cos(t), tz=DIST.z+.75*Math.sin(t);
+     H.tube(boot,[[x,10.2,-6.4],[x*.75,10.9,-7.6],[(x+tx)/2,11.4,-7.4],[tx,10.9,tz-.3],[tx,10.0,tz]],.13);
+     const sm=new THREE.MeshStandardMaterial({color:"#ffe2a0",emissive:"#ff8a1a",emissiveIntensity:2.5});
+     p.sparkMats.push(sm); const s=H.sphere(sm,.42,x,10.0,-1.4); s.visible=false; p.anim.sparks.push(s);});},
+ crankSensor(H){const m=H.m(0,{metal:.2,rough:.6}), dark=H.m(0,RUBBER);
+   H.cyl(m,.45,1.5,"y",-10.6,7.15,0,{seg:16}); H.box(m,.9,.7,.9,-10.6,8.2,0);
+   H.box(H.m(0,{color:"#7b848c",metal:.6}),1.8,.22,1.8,-10.6,6.55,0);
+   H.tube(dark,[[-10.6,8.5,0],[-10.4,9.6,-1.2],[-11.2,10.4,-3]],.12);},
+ waterPump(H){const m=H.m(0,{metal:.5,rough:.45}), m2=H.m(-.12,{metal:.6});
+   H.cyl(m,1.5,1.2,"x",11.0,6.5,0); H.cyl(m2,2,.6,"x",12.6,6.5,0,{seg:36});
+   H.cyl(m2,.35,1.3,"x",13.2,6.5,0,{seg:12}); H.cyl(m,.5,1.8,"z",11.0,5.3,-1.8,{seg:16});},
+ thermostat(H){const m=H.m(.05,{metal:.5,rough:.45}); H.box(m,1.4,1.3,1.6,10.2,12.6,2.0); H.cyl(m,.55,1.4,"x",11.4,12.8,2.0,{seg:16});},
+ radiator(H){const m=H.m(-.05,{metal:.5,rough:.5}), m2=H.m(-.18,{metal:.4}), hose=H.m(0,RUBBER);
+   H.box(m,1.6,13,20,16.6,6,0); H.box(m2,2,1.4,20.6,16.6,13.2,0); H.box(m2,2,1.4,20.6,16.6,-1.2,0);
+   for(let k=0;k<11;k++) H.add(new THREE.BoxGeometry(.08,.1,19.4),m2,15.77,0.2+k*1.16,0,null,false);
+   H.tube(hose,[[11.9,12.8,2],[13.6,13.8,3.2],[15.6,13.0,5]],.55);
+   H.tube(hose,[[11,5.3,-2.7],[12.6,2.5,-4.2],[15.6,-.6,-6]],.55);
+   H.cyl(m2,.4,.8,"y",16.6,14.3,7,{seg:12});},
+ fan(H,p){const m=H.m(.02,{metal:.2,rough:.6}), m2=H.m(-.15,{metal:.5});
+   const pv=H.pivot(13.6,6.5,0); p.anim.rot=pv;
+   H.cyl(m2,.9,.8,"x",0,0,0,{parent:pv}); H.cyl(m2,1.4,.9,"x",-.35,0,0,{parent:pv,seg:24});
+   for(let k=0;k<5;k++){const bg=H.pivot(0,0,0,pv); bg.rotation.x=k/5*Math.PI*2; const b=H.box(m,.14,1.9,4.8,0,0,3.3,bg); b.rotation.z=.38;}},
+ acCompressor(H){const m=H.m(0,{color:"#a9b0b6",metal:.6,rough:.4}), m2=H.m(-.15,{metal:.6}), clutch=H.m(-.35,{metal:.5});
+   H.cyl(m,2.4,3,"x",10.8,2.5,6.5,{seg:32}); H.cyl(m2,2.2,.7,"x",12.6,2.5,6.5,{seg:32}); H.cyl(clutch,1.3,.25,"x",13.05,2.5,6.5,{seg:24});
+   H.box(m2,1.4,1.2,2.2,9.6,2.5,4.4); H.box(m2,1.2,1,1,10.6,5.1,7.0); H.box(m2,1.2,1,1,10.6,4.9,5.4);},
+ condenser(H){const m=H.m(-.1,{metal:.5,rough:.5}), m2=H.m(-.3,{metal:.5});
+   H.box(m,.8,12,19,18.4,6,0);
+   for(let k=0;k<10;k++) H.add(new THREE.BoxGeometry(.06,.08,18.6),m2,18.84,0.6+k*1.2,0,null,false);
+   SIDES.forEach(s=>H.box(m2,1,12.4,.5,18.4,6,s*9.6));},
+ receiverDrier(H){const m=H.m(-.05,{metal:.5,rough:.4}), m2=H.m(-.25,{metal:.6});
+   H.cyl(m,1,4,"y",17.6,8,11.6,{seg:20}); H.cyl(m2,.55,.5,"y",17.6,10.25,11.6,{seg:14}); H.box(m2,.4,1.2,2.4,17.6,8,10.4);},
+ acLines(H){const hi=H.m(0,{color:"#b7bec4",metal:.75,rough:.3}), lo=H.m(0,{color:"#9aa2a9",metal:.75,rough:.3}), cap=H.m(0,{color:"#2f6fbf",metal:.1}), capR=H.m(0,{color:"#c4372c",metal:.1});
+   H.tube(hi,[[11,5.2,7],[14,9,9.6],[18.3,11.2,9.6]],.32);
+   H.tube(hi,[[18.3,1.2,9.6],[18.1,3.5,11.2],[17.6,5.9,11.6]],.22);
+   H.tube(hi,[[17.6,10.5,11.6],[16,15.5,9],[8,16.6,1],[0,16.9,-8],[-10,13,-10.5],[-13.6,11,-10.5]],.22,{seg:90});
+   H.tube(lo,[[-13.6,10,-11.8],[-6,15.6,-11.2],[6,16.6,-9],[12.5,15.4,2],[13.4,9.5,7.6],[11.2,5,5.4]],.42,{seg:90});
+   H.cyl(capR,.32,.6,"y",15.4,14.9,9.3,{seg:10}); H.cyl(cap,.38,.6,"y",4,17.2,-9.6,{seg:10});},
+ oilPan(H){const m=H.m(-.1,{metal:.55,rough:.45}), m2=H.m(-.2,{metal:.6});
+   H.box(m,19.2,.3,7.6,0,-1.65,0); H.box(m,10.5,2.6,7,-4.25,-3.1,0); H.box(m,8.5,6,7,5.25,-4.8,0); H.cyl(m2,.4,.4,"y",6,-8.0,1.5,{seg:6});},
+ oilPump(H){const m=H.m(.05,{metal:.5,rough:.45}), m2=H.m(-.1,{metal:.5});
+   H.box(m,2.2,1.6,2,1.5,-3.6,-2.0); H.tube(m2,[[1.5,-4.4,-2],[2.5,-6,-1.5],[4.5,-7.1,0]],.3); H.cyl(m2,1.3,.25,"y",4.6,-7.3,0,{seg:28});},
+ oilFilter(H){const m=H.m(0,{metal:.3,rough:.5}), m2=H.m(-.15,{metal:.6});
+   H.cyl(m2,.9,.8,"z",4,1.8,-4.0,{seg:20}); H.cyl(m,1.5,4,"z",4,1.8,-6.4,{seg:28}); H.cyl(m2,1.55,.3,"z",4,1.8,-4.55,{seg:28});},
+ exhaustManifold(H){const m=H.m(0,{metal:.4,rough:.75});
+   CYL_X.forEach(x=>H.box(m,1.4,1.3,2.4,x,10.0,5.0)); H.cyl(m,.95,15,"x",0.3,8.6,6.4,{seg:24}); H.tube(m,EXH_PIPE,.85,{seg:80});},
+ o2sensor(H){const m=H.m(.1,{metal:.7,rough:.3}), dark=H.m(0,RUBBER);
+   const c=new THREE.CatmullRomCurve3(EXH_PIPE.map(q=>new V(q[0],q[1],q[2])),false,"centripetal"); const pt=c.getPoint(.32);
+   H.cyl(m,.32,1.4,"z",pt.x,pt.y,pt.z+1.2,{seg:6}); H.cyl(dark,.22,.8,"z",pt.x,pt.y,pt.z+2.2,{seg:10});
+   H.tube(dark,[[pt.x,pt.y,pt.z+2.5],[pt.x-.5,pt.y+1.6,pt.z+3.2],[pt.x-1.8,pt.y+3.2,pt.z+2.6]],.1);},
+ alternator(H){const m=H.m(.02,{color:"#a9b0b6",metal:.6,rough:.4}), acc=H.m(0,{metal:.3}), m2=H.m(-.15,{metal:.6});
+   H.cyl(m,2.2,3,"x",10.6,9.5,5.8,{seg:32}); H.torus(acc,1.7,.12,"x",12.15,9.5,5.8); H.cyl(m2,1.0,.7,"x",12.6,9.5,5.8,{seg:24}); H.box(m2,1.2,1,2,9.4,9.5,4.4);},
+ starter(H){const m=H.m(0,{color:"#4d5359",metal:.5,rough:.5}), acc=H.m(0,{metal:.3}), m2=H.m(-.1,{metal:.6});
+   H.cyl(m,1.4,5,"x",-6.5,-.5,-5.2,{seg:28}); H.cyl(acc,.7,3,"x",-6.0,1.3,-5.2,{seg:20});
+   H.cyl(m2,.8,1.6,"x",-9.6,-.5,-5.2,{seg:20}); H.cyl(m2,.5,.8,"x",-10.6,-.5,-5.2,{seg:12});},
+ psPump(H){const m=H.m(0,{color:"#5a6168",metal:.5,rough:.45}), acc=H.m(0,{metal:.3}), m2=H.m(-.12,{metal:.6}), dark=H.m(0,RUBBER);
+   H.cyl(m,1.5,2.8,"x",10.8,9.0,-5.5,{seg:28}); H.cyl(acc,1.1,1.6,"y",10.6,11.3,-5.5,{seg:24});
+   H.cyl(dark,.6,.3,"y",10.6,12.25,-5.5,{seg:16}); H.cyl(m2,1.7,.6,"x",12.6,9.0,-5.5,{seg:32});},
+
+ /* chassis (vehicle coordinates) */
+ clutch(H){const m=H.m(0,{metal:.5,rough:.45}), m2=H.m(-.15,{metal:.6}), disc=H.m(0,{color:"#8a7a66",metal:.1,rough:.9}), dark=H.m(0,RUBBER);
+   H.cyl(disc,5,.35,"x",24.75,25,0,{seg:40}); H.cyl(m,5.5,1.3,"x",23.8,25,0,{seg:40}); H.torus(m2,2.2,.3,"x",23.0,25,0);
+   H.cyl(m,.7,2.2,"x",21.6,37.5,12,{seg:16}); H.box(m2,1.4,1.2,1.2,22.4,38.8,12);
+   H.cyl(m,.6,1.8,"x",20.5,27.5,7.2,{seg:14});
+   H.tube(dark,[[22.6,37.5,12],[24,33,11],[22,29,8.5],[20.6,27.8,7.4]],.15);},
+ transmission(H,p){const m=H.m(0,{color:"#a3a9ae",metal:.55,rough:.45}), m2=H.m(-.1,{color:"#8a9096",metal:.55}), g=H.m(0,{metal:.6,rough:.35}), knob=H.m(0,RUBBER);
+   H.cyl(m,7,8,"x",21,25,0,{r2:5,seg:36});
+   H.ab(m,1,17,20.5,29,-4.5,4.5);
+   H.cyl(m2,2.2,6,"y",5,32,0,{seg:20});
+   const ms=H.pivot(0,25,0); p.anim.main=ms;
+   [[15,2.0],[12.5,2.6],[10,3.1],[7.5,2.3],[4,1.7]].forEach(([x,r])=>H.cyl(g,r,1.1,"x",x,0,0,{parent:ms,seg:18}));
+   H.cyl(g,.6,17,"x",9,0,0,{parent:ms,seg:12});
+   [[15,1.6],[12.5,1.1],[10,.8],[7.5,1.5],[4,2.0]].forEach(([x,r])=>H.cyl(g,r,1.0,"x",x,21.3,0,{seg:18}));
+   H.rod(knob,[5,35,0],[3.5,43,0],.35); H.sphere(knob,1.0,3.4,43.6,0);},
+ transferCase(H){const m=H.m(0,{color:"#9aa0a6",metal:.55,rough:.45}), m2=H.m(-.1,{color:"#868c92",metal:.55}), knob=H.m(0,RUBBER), ch=H.m(0,{metal:.6});
+   H.ab(m,-8.5,1,18,28.5,-3.5,6.5);
+   H.cyl(m2,1.6,2.4,"x",1.8,19.5,6,{seg:18}); H.cyl(m2,1.7,3,"x",-10,24,0,{seg:18});
+   H.cyl(ch,1.9,.6,"x",-4,25,0,{seg:20}); H.cyl(ch,1.9,.6,"x",-4,19.5,6,{seg:20});
+   H.rod(knob,[-2,28.5,3],[-4,40,4.5],.3); H.sphere(knob,.85,-4.1,40.6,4.5);},
+ frontDriveshaft(H,p){const m=H.m(0,{color:"#7a8188",metal:.6,rough:.4}), m2=H.m(0,{metal:.5});
+   p.anim.sp=shaftAt(H,m,m2,[3.2,19.5,6],[FA-6.8,AY,8],1.15);},
+ rearDriveshaft(H,p){const m=H.m(0,{color:"#7a8188",metal:.6,rough:.4}), m2=H.m(0,{metal:.5});
+   p.anim.sp=shaftAt(H,m,m2,[-11.6,24,0],[RA+6.8,AY,1],1.4);},
+ frontAxle(H){const m=H.m(-.05,{color:"#5c6168",metal:.5,rough:.55}), m2=H.m(0,{metal:.4});
+   H.cyl(m,1.6,49,"z",FA,AY,0,{seg:20}); H.sphere(m,4.2,FA,AY,8,{seg:24}); H.cyl(m2,3.6,.5,"x",FA-3.6,AY,8,{seg:28});
+   H.cyl(m,1.6,3.2,"x",FA-5.2,AY,8,{seg:16});
+   SIDES.forEach(s=>{H.ab(m,FA-1.5,FA+1.5,AY-3,AY+3,s*24,s*26); H.cyl(m,2,2,"z",FA,AY,s*27,{seg:18});
+     H.rod(m2,[FA,AY+1.5,s*25],[FA-6,16.5,s*25],.45); H.ab(m2,FA-2,FA,AY-2.6,AY-1.4,s*14.5,s*15.5); H.ab(m2,FA-2,FA,AY+3,AY+4.2,s*9.5,s*10.5);});},
+ rearAxle(H){const m=H.m(-.05,{color:"#5c6168",metal:.5,rough:.55}), m2=H.m(0,{metal:.4});
+   H.cyl(m,1.6,49,"z",RA,AY,0,{seg:20}); H.sphere(m,4.6,RA,AY,1,{seg:24}); H.cyl(m2,3.9,.5,"x",RA-3.9,AY,1,{seg:28});
+   H.cyl(m,1.6,3.2,"x",RA+5.2,AY,1,{seg:16});
+   SIDES.forEach(s=>{H.cyl(m,2.2,1.6,"z",RA,AY,s*24.8,{seg:18}); H.ab(m2,RA,RA+2,AY-2.6,AY-1.4,s*14.5,s*15.5); H.ab(m2,RA,RA+2,AY+3,AY+4.2,s*7.5,s*8.5);});},
+ frontWheels(H,p){const mats=wheelMats(H); p.anim.spin=SIDES.map(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*16]); return wheelAt(H,mats,FA,AY,s*TZ,s,g);});},
+ rearWheels(H,p){const mats=wheelMats(H); p.anim.spin=SIDES.map(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*16]); return wheelAt(H,mats,RA,AY,s*TZ,s,g);});},
+ spare(H){const mats=wheelMats(H); const pv=H.pivot(-78,41,0); pv.rotation.y=-Math.PI/2; wheelAt(H,mats,0,0,0,1,pv);
+   H.ab(H.m(0,{color:"#4a4f55",metal:.5}),-74.5,-73.2,37,45,-4,4);},
+ coils(H){const m=H.m(0,{metal:.4,rough:.4}), pad=H.m(-.2,{metal:.3});
+   [FA,RA].forEach(x=>SIDES.forEach(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*4]);
+     const P=H; P.helix(m,x,15.4,s*17,11.2,2.3,6,.33); P.cyl(pad,2.6,.4,"y",x,15.3,s*17,{seg:20,parent:undefined});
+   }));},
+ shocks(H){const m=H.m(0,{metal:.4,rough:.4}), rod=H.m(0,{color:"#c9d0d6",metal:.85,rough:.2}), boot=H.m(-.25,{metal:.1});
+   [[FA+2,20.5],[RA-3,21.5]].forEach(([x,z])=>SIDES.forEach(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*6]);
+     H.rod(m,[x,12.6,s*z],[x,21,s*z],.85,{parent:g,seg:16}); H.rod(rod,[x,21,s*z],[x,27.6,s*z],.32,{parent:g,seg:10});
+     H.cyl(boot,.7,.8,"x",x,12.6,s*z,{parent:g,seg:12}); H.cyl(boot,.7,.8,"x",x,27.8,s*z,{parent:g,seg:12});}));},
+ frontArms(H){const m=H.m(0,{metal:.4,rough:.5}), b=H.m(-.25,{metal:.1});
+   SIDES.forEach(s=>{H.rod(m,[FA-1,AY-2,s*15],[FA-20,21,s*14.5],.75); H.rod(m,[FA-1,AY+3.6,s*10],[FA-16,23,s*11.6],.6);
+     [[FA-1,AY-2,s*15],[FA-20,21,s*14.5],[FA-1,AY+3.6,s*10],[FA-16,23,s*11.6]].forEach(q=>H.cyl(b,.95,1.2,"z",q[0],q[1],q[2],{seg:14}));});},
+ rearArms(H){const m=H.m(0,{metal:.4,rough:.5}), b=H.m(-.25,{metal:.1});
+   SIDES.forEach(s=>{H.rod(m,[RA+1,AY-2,s*15],[RA+20,21,s*14.5],.75); H.rod(m,[RA+1,AY+3.6,s*8],[RA+16,23.5,s*11.6],.6);
+     [[RA+1,AY-2,s*15],[RA+20,21,s*14.5],[RA+1,AY+3.6,s*8],[RA+16,23.5,s*11.6]].forEach(q=>H.cyl(b,.95,1.2,"z",q[0],q[1],q[2],{seg:14}));});},
+ trackBars(H){const m=H.m(.05,{metal:.4,rough:.5}), b=H.m(-.25,{metal:.1});
+   H.rod(m,[FA+2,14.2,-22],[FA+2,24,13.2],.6); H.rod(m,[RA+2,15,18],[RA+2,24,-13.2],.6);
+   [[FA+2,14.2,-22],[FA+2,24,13.2],[RA+2,15,18],[RA+2,24,-13.2]].forEach(q=>H.cyl(b,.9,1.4,"x",q[0],q[1],q[2],{seg:14}));},
+ swayBars(H){const m=H.m(0,{metal:.4,rough:.45}), l=H.m(-.15,{metal:.5});
+   H.tube(m,[[FA+3.8,17,15.5],[FA+7.8,20.5,15],[FA+8.8,20.5,0],[FA+7.8,20.5,-15],[FA+3.8,17,-15.5]],.45,{seg:80});
+   SIDES.forEach(s=>{H.rod(l,[FA+3.8,17,s*15.5],[FA+3.8,13.4,s*15.5],.3); H.ab(l,FA+.5,FA+4.2,12.9,13.6,s*15.1,s*15.9);});
+   H.tube(m,[[RA-9.3,12,19],[RA-4,11.6,18],[RA-2,11.6,0],[RA-4,11.6,-18],[RA-9.3,12,-19]],.4,{seg:80});
+   SIDES.forEach(s=>H.rod(l,[RA-9.3,12,s*19],[RA-9.3,22.5,s*19],.3));},
+ steeringBox(H){const m=H.m(-.05,{color:"#5d6a4a",metal:.5,rough:.5}), m2=H.m(0,{metal:.4}), hose=H.m(0,RUBBER);
+   H.ab(m,FA+1.2,FA+5,21.5,25.6,9.3,12.7); H.cyl(m2,.9,1.6,"y",FA+3,26.2,11,{seg:14});
+   H.tube(hose,[[FA+4,25,10],[FA+6,30,6],[ENG.x+12,ENG.y+9.5,-3.5]],.3);},
+ dragLink(H){const m=H.m(0,{metal:.5,rough:.4}), b=H.m(-.2,{metal:.4});
+   H.rod(m,[FA+3,21.5,11],[FA+2.5,18.5,11],.5); H.rod(m,[FA+2.5,18.5,11],[FA-6,17.2,-21],.5);
+   H.sphere(b,.8,FA+2.5,18.5,11); H.sphere(b,.8,FA-6,17.2,-21);},
+ tieRod(H){const m=H.m(0,{metal:.5,rough:.4}), d=H.m(-.15,{color:"#c8a43a",metal:.3}), b=H.m(-.2,{metal:.4});
+   H.rod(m,[FA-6,16.5,25],[FA-6,16.5,-25],.55); H.sphere(b,.8,FA-6,16.5,25); H.sphere(b,.8,FA-6,16.5,-25);
+   H.rod(d,[FA-6,16.5,4],[FA-4,15.8,-5],.7); H.rod(m,[FA-4,15.8,-5],[FA-1.6,15.1,-12],.3);},
+ steeringColumn(H){const m=H.m(0,{metal:.5,rough:.4}), w=H.m(0,RUBBER), j=H.m(-.15,{metal:.5});
+   H.rod(m,[FA+3,26.8,11],[30,30,13],.4); H.rod(m,[30,30,13],[21,31.5,15],.4);
+   H.sphere(j,.8,30,30,13); H.sphere(j,.8,21,31.5,15);
+   H.rod(m,[21,31.5,15],[7,42.5,15],1.0);
+   const wg=H.pivot(6,43.3,15); wg.quaternion.setFromUnitVectors(new V(0,0,1),new V(-14,11,0).normalize());
+   H.torus(w,7.2,.6,"z",0,0,0,{parent:wg}); H.box(w,13,.6,.5,0,0,0,wg); H.cyl(w,1.8,1.2,"z",0,0,0,{parent:wg,seg:16});},
+ booster(H){const m=H.m(0,{color:"#3d4247",metal:.5,rough:.45}), mc=H.m(0,{color:"#a7adb2",metal:.6}), res=H.m(0,{color:"#e9e4d6",metal:0,rough:.5});
+   H.cyl(m,4.4,3.4,"x",23.9,38.5,19,{seg:36}); H.cyl(mc,1.2,5,"x",28.2,38.5,19,{seg:18}); H.ab(res,26.5,30,39.6,41.4,17.8,20.2);
+   H.rod(m,[21,38.5,19],[19,34,17],.3);},
+ brakeLines(H){const m=H.m(.05,{color:"#b8a07a",metal:.7,rough:.3}), hose=H.m(0,RUBBER), v=H.m(0,{metal:.5});
+   H.ab(v,25.5,27.5,31,32.5,14,16);
+   H.tube(m,[[29.5,38,18.5],[28,34,16],[26.5,31.7,15]],.16);
+   H.tube(m,[[26.5,31.7,15],[32,28,16],[40,26.5,15.6],[44,24,17]],.16);
+   H.tube(hose,[[44,24,17],[44.5,19,22],[FA-4.6,17.6,26.5]],.25);
+   H.tube(m,[[26.5,31.7,15],[30,29,0],[40,26.5,-15.6],[44,24,-17]],.16);
+   H.tube(hose,[[44,24,-17],[44.5,19,-22],[FA-4.6,17.6,-26.5]],.25);
+   H.tube(m,[[26.5,31.7,15],[24,26,13],[10,21.6,12.6],[-30,21.6,12.6],[-38,21.6,8]],.16,{seg:90});
+   H.tube(hose,[[-38,21.6,8],[-42,18,3],[RA+1.5,AY+1.9,1]],.25);
+   SIDES.forEach(s=>H.tube(m,[[RA+1.5,AY+1.9,1],[RA+1.3,AY+1.9,s*14],[RA+.6,AY+1.6,s*24.5]],.14));},
+ frontBrakes(H){const r=H.m(0,{color:"#8f969c",metal:.8,rough:.35}), c=H.m(0,{metal:.4,rough:.45});
+   SIDES.forEach(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*10]);
+     H.cyl(r,5.5,.9,"z",FA,AY,s*26.5,{parent:g,seg:36}); H.cyl(r,2.4,1.8,"z",FA,AY,s*27.4,{parent:g,seg:20});
+     H.ab(c,FA-6,FA-3.6,AY+1.8,AY+5.2,s*25.2,s*27.8,g);});},
+ rearBrakes(H){const d=H.m(0,{color:"#7d848a",metal:.75,rough:.4}), bp=H.m(-.1,{metal:.4});
+   SIDES.forEach(s=>{const g=H.sub(H.pivot(0,0,0),[0,0,s*10]);
+     H.cyl(d,5,2.6,"z",RA,AY,s*26.6,{parent:g,seg:36}); H.cyl(bp,5.3,.25,"z",RA,AY,s*25.1,{parent:g,seg:36});
+     H.cyl(d,2.0,.6,"z",RA,AY,s*28.1,{parent:g,seg:18});});},
+ parkingBrake(H){const m=H.m(0,{color:"#4f5459",metal:.6}), h=H.m(0,RUBBER);
+   H.ab(m,-12,-4,28.2,29.2,-1.5,1.5); H.rod(h,[-6,29.2,0],[-12.5,33.5,0],.45);
+   H.tube(m,[[-8,28,0],[-14,24,0],[-30,22,4],[-42,18,10],[RA,AY-1,s25(1)]],.13);
+   H.tube(m,[[-14,24,0],[-30,22,-4],[-42,18,-10],[RA,AY-1,s25(-1)]],.13);
+   function s25(s){return s*24.5;}},
+ frame(H){const m=H.m(0,{metal:.4,rough:.6}), m2=H.m(-.08,{metal:.4,rough:.6});
+   SIDES.forEach(s=>{H.ab(m,-73.5,66,22,27,s*13,s*16);
+     [FA,RA].forEach(x=>H.ab(m2,x-3,x+3,27,28.2,s*14,s*20));
+     H.ab(m2,FA+1,FA+3,26.8,28.2,s*16,s*22); H.ab(m2,RA-4,RA-2,26.8,28.2,s*16,s*23);
+     H.ab(m2,FA-21.5,FA-18.5,19.5,22,s*13.5,s*15.5); H.ab(m2,FA-17.5,FA-14.5,22,24,s*11,s*13);
+     H.ab(m2,RA+18.5,RA+21.5,19.5,22,s*13.5,s*15.5); H.ab(m2,RA+14.5,RA+17.5,22,24.5,s*11,s*13);
+     H.ab(m2,FA+1,FA+3,22,25,s*12.2,s*13); H.ab(m2,RA+1,RA+3,22,25,s*12.2,s*13);
+     H.ab(m2,ENG.x,ENG.x+3,ENG.y-3,22.5,s*9.5,s*13);});
+   H.ab(m,58.5,61.5,22.5,26.5,-13,13); H.ab(m,-70,-67,22.5,26.5,-13,13); H.ab(m,-31,-28,22.5,26,-13,13);
+   H.ab(m2,RA-12,RA-8,22,23,16,20.5); H.ab(m2,RA-12,RA-8,22,23,-20.5,-16);},
+ skidPlates(H){const m=H.m(.05,{metal:.5,rough:.5});
+   H.ab(m,-12,7,16.6,17.2,-13,13); SIDES.forEach(s=>H.ab(m,-12,7,17.2,22,s*12.4,s*13));
+   H.ab(m,-67,-49,19.6,20.2,-13,13); SIDES.forEach(s=>H.ab(m,-67,-49,20.2,22,s*12.4,s*13));},
+ bumpers(H){const m=H.m(-.05,{color:"#3b4046",metal:.5,rough:.5}), hook=H.m(0,{color:"#c23b2e",metal:.4});
+   const f=H.sub(H.pivot(0,0,0),[12,0,0]), r=H.sub(H.pivot(0,0,0),[-12,0,0]);
+   H.ab(m,66,69.5,21.5,27.5,-29,29,f); SIDES.forEach(s=>H.torus(hook,1.2,.35,"z",68.4,20.5,s*11,{parent:f}));
+   H.ab(m,-77,-73.5,21.5,27,-27,27,r); SIDES.forEach(s=>H.ab(m,-76.5,-73.5,21.5,27,s*27,s*30,r));},
+ body(H){const m=H.m(0,{color:"#6f8a5e",metal:.25,rough:.6}), dk=H.m(-.1,{color:"#3a3f44",metal:.3,rough:.6});
+   H.ab(m,-72,20.5,27.6,28.2,-28.5,28.5);
+   SIDES.forEach(s=>{const zA=s*27.9, zB=s*28.5;
+     H.ab(m,-72,-62,28.2,44,zA,zB); H.ab(m,-62,-31,36,44,zA,zB); H.ab(m,-31,20.5,28.2,44,zA,zB);
+     H.ab(dk,-63.5,-29.5,34.8,36,s*28.5,s*33.5); H.ab(dk,24,62,36,37,s*21,s*33.5);
+     H.ab(m,22,62,30,36,s*20.8,s*21.6);
+     H.ab(dk,18.6,20,44,61,s*27,s*28.5); H.ab(dk,-39,-37,28.2,62,s*25.5,s*27.5);});
+   H.ab(m,-73,-72,28.2,42,-27.9,27.9);
+   H.ab(m,20.5,22,28.2,44,-28.5,28.5); H.ab(m,13,20.5,40.5,44,-27.9,27.9);
+   H.ab(m,22,64,42.5,43.4,-21.6,21.6); H.ab(m,63.4,65,27,42.5,-21.6,21.6);
+   H.ab(dk,18.6,20,59.5,61,-28.5,28.5); H.ab(dk,18.6,20,44,45.4,-28.5,28.5); H.ab(dk,-39,-37,60,62,-27.5,27.5);},
+ fuelTank(H){const m=H.m(0,{color:"#2f3439",metal:.1,rough:.8}), mod=H.m(0,{metal:.4}), neck=H.m(0,RUBBER);
+   H.ab(m,-66,-50,20.4,28.8,-12.3,12.3); H.cyl(mod,2.4,1,"y",-57,29.3,5,{seg:24});
+   H.tube(neck,[[-52,27,11],[-51,33,20],[-51,39,27.5]],.8); H.cyl(mod,1.2,.6,"z",-51,39.4,28.3,{seg:16});},
+ fuelLines(H){const m=H.m(.05,{metal:.5,rough:.4});
+   H.tube(m,[[-57,29.8,5],[-50,29,9.5],[-44,24,11.5],[-20,21.2,11.8],[14,21.2,11.8],[21,25,10],[ENG.x-13,ENG.y+6,6.8]],.22,{seg:120});},
+ evaporator(H){const m=H.m(-.2,{color:"#4a5056",metal:.1,rough:.7}), core=H.m(0,{metal:.5,rough:.4}), heat=H.m(0,{color:"#c9783f",metal:.5}), m2=H.m(-.3,{metal:.5}), dark=H.m(0,RUBBER);
+   H.ab(m,12.5,20.4,32,40,-25,-7.5);
+   H.ab(core,15,19.2,33.2,39,-17.5,-9.5); H.ab(heat,13.2,14.6,34,38.5,-16.5,-10.5);
+   H.cyl(m2,2.4,2.6,"z",16,36,-21.5,{seg:28});
+   H.ab(m2,20.4,22.6,35.2,36.8,-12,-9.8);
+   H.tube(dark,[[16,32,-12],[16.5,29,-13],[17,26.5,-13.5]],.3);},
+ catalyticConverter(H){const m=H.m(0,{color:"#9a9690",metal:.6,rough:.5}), p=H.m(-.05,{metal:.5,rough:.6}), dark=H.m(0,RUBBER);
+   const s=[ENG.x-8,ENG.y-6,6.4];
+   H.tube(p,[s,[25,16.6,3],[22,15.6,-5],[20.8,15.6,-7.5]],.85);
+   H.cyl(m,3.1,11,"x",15,15.6,-7.6,{seg:28,r2:3.1});
+   H.cyl(p,1.4,1.4,"x",20.2,15.6,-7.6,{seg:18,r2:.9}); H.cyl(p,1.4,1.4,"x",8.8,15.6,-7.6,{seg:18,r2:.9});
+   H.cyl(H.m(.1,{metal:.7}),.32,1.4,"z",7.2,15.6,-8.9,{seg:6}); H.tube(dark,[[7.2,15.6,-9.6],[7,18,-10.5],[6,21,-11.5]],.1);},
+ muffler(H){const m=H.m(.05,{color:"#8c8780",metal:.5,rough:.6}), p=H.m(-.05,{metal:.5,rough:.6});
+   H.tube(p,[[8.2,15.6,-7.6],[-5,15.8,-8.6],[-23.8,15.6,-9]],.85,{seg:40});
+   H.ab(m,-40,-24,13,18,-13.4,-4.6);
+   H.tube(p,[[-40,15.5,-9],[-44,20.6,-10],[-49.5,21,-11],[-56,19.6,-19.5],[-72,19.6,-22]],.8,{seg:80});},
+ battery(H){const m=H.m(0,{color:"#2c3135",metal:.1,rough:.7}), top=H.m(0,{color:"#c9cdd0",metal:.1}), pos=H.m(0,{color:"#c4372c",metal:.2,rough:.6}), neg=H.m(0,RUBBER);
+   H.ab(m,36,45,28,35,15,21.5); H.ab(top,36.2,44.8,35,35.6,15.2,21.3);
+   H.cyl(pos,.45,.8,"y",37.5,36,20,{seg:12}); H.cyl(neg,.45,.8,"y",37.5,36,16.5,{seg:12});
+   H.tube(pos,[[37.5,36.4,20],[34,34,18],[33,28,13.5],[32,17.5,7],[30,16.8,-3],[ENG.x-6.5,ENG.y+1,-6.5]],.3,{seg:90});
+   H.tube(neg,[[37.5,36.4,16.5],[36,33,13],[ENG.x+2,ENG.y+3,9.4]],.28);},
+ pdc(H){const m=H.m(-.05,{color:"#2b3034",metal:.1,rough:.7}), lid=H.m(0,{color:"#3c4247",metal:.1});
+   H.ab(m,28,35,31,35,15.5,21); H.ab(lid,28.2,34.8,35,35.5,15.7,20.8);},
+ pcm(H){const m=H.m(0,{color:"#a5abb0",metal:.6,rough:.4}), plug=H.m(0,RUBBER);
+   H.ab(m,22,23.6,33,40,-21,-14.5); H.ab(plug,23.6,24.6,36,38.5,-20,-15.5);
+   H.tube(plug,[[24.6,37,-17.5],[28,36,-12],[ENG.x-4,ENG.y+11,-7]],.3);},
+ lights(H){const lens=H.m(0,{color:"#f6efd6",metal:0,rough:.15}), bez=H.m(0,{color:"#b6bcc1",metal:.7}), tail=H.m(0,{color:"#c4372c",metal:0,rough:.3}), amb=H.m(0,{color:"#e8a33a",metal:0,rough:.3}), wire=H.m(0,RUBBER);
+   SIDES.forEach(s=>{H.cyl(bez,3.6,.8,"x",65.3,35.5,s*15,{seg:28}); H.cyl(lens,3.1,.6,"x",65.9,35.5,s*15,{seg:28});
+     H.ab(amb,65,65.8,29,31,s*8.5,s*11.5); H.ab(tail,-73.8,-72.8,30,37,s*23.5,s*26.5);});
+   H.tube(wire,[[64.5,32,15],[50,31,18.5],[30,30.6,21.5],[20,29,20],[0,28.4,15],[-60,28.4,15],[-72.5,32,24]],.22,{seg:120});}
+};
+
+/* ---------- Instantiate ---------- */
+const engineRoot = new THREE.Group(); engineRoot.position.copy(ENG); scene.add(engineRoot);
+const chassisRoot = new THREE.Group(); scene.add(chassisRoot);
+PARTS.forEach(p=>{
+  p.group=new THREE.Group(); p.mats=[]; p.sparkMats=[]; p.anim={}; p.subs=[]; p.offset=new V(); p.returning=false; p.hidden=false;
+  p.lineMat=new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:.28});
+  BUILD[p.id](maker(p),p);
+  (p.area==="engine"?engineRoot:chassisRoot).add(p.group);
+});
+scene.updateMatrixWorld(true);
+PARTS.forEach(p=>{p.anchor=new THREE.Box3().setFromObject(p.group).getCenter(new V());});
+
+/* ---------- State ---------- */
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const state = {view:"jeep",selected:null,hover:null,focus:null,xray:true,explode:0,running:!reduceMotion,fast:false,
+  gear:"4",tc:"2H",challenge:null};
+let explodeShown=0, theta=0, wheelAng=0;
+const visible = ()=>PARTS.filter(p=>!p.hidden);
+
+function applyLook(){
+  PARTS.forEach(p=>{
+    let op=1;
+    if(state.xray && p.xray) op=p.xop||.2;
+    if(state.focus && p.sys!==state.focus) op=Math.min(op,.06);
+    const sel=state.selected===p.id, hov=state.hover===p.id && !sel;
+    if(sel && op<.5) op=Math.max(op,.45);
+    p.mats.forEach(m=>{
+      const tr=op<.999;
+      if(m.transparent!==tr){m.transparent=tr; m.needsUpdate=true;}
+      m.opacity=op; m.depthWrite=!tr;
+      m.emissive.copy(sel||hov?ACCENT:new THREE.Color(0));
+      m.emissiveIntensity=sel?.5:hov?.22:0;
+    });
+    p.sparkMats.forEach(m=>{m.transparent=op<1;m.opacity=op;});
+    p.lineMat.opacity=(p.id==="body"?.5:.28)*op;
+  });
+}
+
+/* ---------- Picking & dragging ---------- */
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), plane=new THREE.Plane();
+function setNdc(e){const r=renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); return r;}
+function pick(e){setNdc(e); ray.setFromCamera(ndc,camera);
+  const hits=ray.intersectObjects(pickables,false).filter(h=>h.object.visible && !BY[h.object.userData.pid].hidden);
+  if(!hits.length) return null;
+  const usable=h=>{const p=BY[h.object.userData.pid]; return !(state.focus && p.sys!==state.focus);};
+  const solid=hits.find(h=>usable(h) && !(state.xray && BY[h.object.userData.pid].xray));
+  return solid || hits.find(usable) || null;}
+
+let drag=null, downEmpty=null;
+vp.addEventListener("pointerdown",e=>{
+  if(e.target!==renderer.domElement) return;
+  if(e.pointerType==="mouse" && e.button!==0) return;
+  const hit=pick(e);
+  if(!hit){downEmpty={x:e.clientX,y:e.clientY}; return;}
+  const p=BY[hit.object.userData.pid];
+  controls.enabled=false;
+  plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new V()),hit.point);
+  drag={p,start:hit.point.clone(),startOff:p.offset.clone(),sx:e.clientX,sy:e.clientY,moved:false};
+  p.returning=false;
+  try{renderer.domElement.setPointerCapture(e.pointerId);}catch(_){}
+  hideTip();
+},{capture:true});
+window.addEventListener("pointermove",e=>{
+  if(drag){
+    if(!drag.moved && Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>4){drag.moved=true; select(drag.p.id,true);}
+    if(drag.moved){setNdc(e); ray.setFromCamera(ndc,camera); const pt=new V();
+      if(ray.ray.intersectPlane(plane,pt)) drag.p.offset.copy(drag.startOff).add(pt.sub(drag.start));}
+    return;
+  }
+  if(e.pointerType!=="mouse" || e.buttons) return;
+  const r=renderer.domElement.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){setHover(null);return;}
+  const hit=pick(e); setHover(hit?hit.object.userData.pid:null,e);
+});
+window.addEventListener("pointerup",e=>{
+  if(drag){const d=drag; drag=null; controls.enabled=true;
+    if(!d.moved) select(d.p.id); else if(state.challenge) trySnap(d.p);
+    return;}
+  if(downEmpty && Math.hypot(e.clientX-downEmpty.x,e.clientY-downEmpty.y)<4 && e.target===renderer.domElement) select(null);
+  downEmpty=null;
+});
+renderer.domElement.addEventListener("dblclick",e=>{const hit=pick(e); if(hit) sendHome(BY[hit.object.userData.pid]);});
+
+const tip=document.getElementById("tip");
+function setHover(id,e){
+  if(state.hover!==id){state.hover=id; applyLook(); renderer.domElement.style.cursor=id?"grab":"";}
+  if(id && e){const r=vp.getBoundingClientRect(); const p=BY[id];
+    tip.innerHTML=p.name+"<i>"+SYS[p.sys].name+"</i>"; tip.hidden=false;
+    let x=e.clientX-r.left, y=e.clientY-r.top; if(x>r.width-220) x-=220;
+    tip.style.left=x+"px"; tip.style.top=y+"px";}
+  else hideTip();
+}
+function hideTip(){tip.hidden=true;}
+function sendHome(p){p.returning=true; if(state.challenge) markPlaced(p);}
+
+/* ---------- Challenge ---------- */
+const cbar=document.getElementById("cbar"), toastEl=document.getElementById("toast");
+let toastT=0;
+function toast(msg,ms){toastEl.textContent=msg; toastEl.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>toastEl.hidden=true,ms||2600);}
+function screenOf(v){const r=renderer.domElement.getBoundingClientRect(); const q=v.clone().project(camera); return [(q.x+1)/2*r.width,(1-q.y)/2*r.height];}
+function startChallenge(){
+  const jeep=state.view==="jeep";
+  const list=visible().filter(p=>jeep?(p.area==="chassis"&&p.id!=="frame"):(p.id!=="block")).map(p=>p.id);
+  state.challenge={list:new Set(list),placed:new Set(),t0:performance.now(),done:false};
+  state.explode=0; explodeEl.value=0; state.focus=null; state.selected=null;
+  const c = jeep?new V(0,20,0):ENG.clone().add(new V(2,0,0));
+  PARTS.forEach(p=>{p.returning=false; if(!state.challenge.list.has(p.id)){p.offset.set(0,0,0);return;}
+    const a=Math.random()*Math.PI*2, rad=jeep?(110+Math.random()*45):(24+Math.random()*10);
+    const tgt=new V(c.x+Math.cos(a)*rad, jeep?(5+Math.random()*55):(c.y-3+Math.random()*20), c.z+Math.sin(a)*rad);
+    p.offset.copy(tgt.sub(p.anchor));});
+  flyTo(CAMS[state.view].ch,CAMS[state.view].tgt);
+  syncUI(); renderPanel(); applyLook();
+  toast(jeep?"Drag each part back onto the frame. It snaps in when it lines up.":"Drag each part back onto the block. It snaps in when it lines up.",4200);
+}
+function trySnap(p){
+  const ch=state.challenge; if(!ch||!ch.list.has(p.id)) return;
+  if(p.offset.length()<.8){markPlaced(p);return;}
+  const a=screenOf(p.anchor), b=screenOf(p.anchor.clone().add(p.offset));
+  if(Math.hypot(a[0]-b[0],a[1]-b[1])<46){p.returning=true; markPlaced(p);}
+  else if(ch.placed.has(p.id)){ch.placed.delete(p.id); renderCbar();}
+}
+function markPlaced(p){const ch=state.challenge; if(!ch||!ch.list.has(p.id)||ch.placed.has(p.id)) return;
+  ch.placed.add(p.id); toast(p.name+" is in place.",1400); renderCbar();
+  if(ch.placed.size===ch.list.size){ch.done=true; const s=Math.round((performance.now()-ch.t0)/1000);
+    toast("Rebuilt in "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0")+".",5000); renderCbar();}}
+function endChallenge(noFly){state.challenge=null; PARTS.forEach(p=>p.returning=true); if(!noFly) flyTo(CAMS[state.view].pos,CAMS[state.view].tgt); syncUI(); renderPanel();}
+function renderCbar(){
+  const ch=state.challenge; cbar.hidden=!ch; if(!ch) return;
+  cbar.innerHTML='<span class="count">'+ch.placed.size+' / '+ch.list.size+'</span><span class="lbl">'+(ch.done?"rebuilt":"parts in place")+'</span>'+
+   (ch.done?"":'<button class="btn" data-act="hint">Hint</button>')+'<button class="btn" data-act="quit">'+(ch.done?"Done":"Quit")+'</button>';
+}
+cbar.addEventListener("click",e=>{const b=e.target.closest("[data-act]"); if(!b) return; if(b.dataset.act==="quit") endChallenge(); else hint();});
+let hintLine=null, hintT=0;
+function hint(){
+  const ch=state.challenge; if(!ch) return;
+  let p=state.selected && ch.list.has(state.selected) && !ch.placed.has(state.selected)?BY[state.selected]:null;
+  if(!p){const left=[...ch.list].filter(id=>!ch.placed.has(id)); if(!left.length) return; p=BY[left[Math.floor(Math.random()*left.length)]]; select(p.id);}
+  if(hintLine) scene.remove(hintLine);
+  const g=new THREE.BufferGeometry().setFromPoints([p.anchor.clone().add(p.offset),p.anchor.clone()]);
+  hintLine=new THREE.Line(g,new THREE.LineDashedMaterial({color:ACCENT,dashSize:state.view==="jeep"?3:.8,gapSize:state.view==="jeep"?2:.5,depthTest:false,transparent:true}));
+  hintLine.computeLineDistances(); hintLine.renderOrder=10; hintLine.userData.p=p; scene.add(hintLine);
+  clearTimeout(hintT); hintT=setTimeout(()=>{if(hintLine){scene.remove(hintLine);hintLine=null;}},3000);
+  toast("Follow the dashed line to where the "+p.name.toLowerCase()+" goes.",2600);
+}
+
+/* ---------- Camera fly ---------- */
+let fly=null;
+function flyTo(pos,tgt){fly={p0:camera.position.clone(),t0:controls.target.clone(),p1:pos.clone(),t1:tgt.clone(),s:performance.now()};}
+
+/* ---------- Panel ---------- */
+const panel=document.getElementById("panel");
+function sw(sys){return 'style="--c:'+SYS[sys].color+'"';}
+function sysRow(k){const n=visible().filter(p=>p.sys===k).length;
+  return '<button class="sysrow" '+sw(k)+' data-go="sys:'+k+'"><span class="sw"></span><span><b>'+SYS[k].name+'</b><small>'+SYS[k].desc+'</small></span><span class="ct">'+n+'</span></button>';}
+function specs(rows){return '<dl class="specs">'+rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join("")+'</dl>';}
+function renderPanel(){
+  const ch=state.challenge, jeep=state.view==="jeep";
+  const cc = ch ? '<div class="challengecard"><b>Rebuild challenge.</b> Drag each part back to where it belongs. Click a part to read what it does and what it works with. Stuck? <b>Hint</b> draws a dashed line to its spot.</div>' : "";
+  if(state.selected){
+    const p=BY[state.selected], s=SYS[p.sys];
+    const links=p.links.filter(id=>BY[id]&&!BY[id].hidden);
+    panel.innerHTML=cc+
+     '<nav class="crumbs" aria-label="Breadcrumb"><button class="link" data-go="overview">'+(jeep?"Jeep":"Engine")+'</button><span>/</span><button class="link" data-go="sys:'+p.sys+'">'+s.name+'</button></nav>'+
+     '<span class="eyebrow" '+sw(p.sys)+'><span class="sw"></span>'+s.name+'</span>'+
+     '<h2>'+p.name+'</h2><p class="lede">'+p.what+'</p>'+
+     '<h3>On this Jeep</h3>'+specs(p.specs)+
+     '<h3>Watch for</h3><div class="watch"><p>'+p.watch+'</p></div>'+
+     (links.length?'<h3>Works with</h3><div class="rel">'+links.map(id=>{const q=BY[id];return '<button class="chip" '+sw(q.sys)+' data-go="part:'+id+'"><span class="sw"></span>'+q.name+'</button>';}).join("")+'</div>':'')+
+     '<div class="actions"><button class="btn" data-act="home">Put it back</button><button class="btn" data-act="solo" aria-pressed="'+(state.focus===p.sys)+'">Highlight '+s.name.toLowerCase()+'</button>'+(ch&&!ch.done&&ch.list.has(p.id)?'<button class="btn" data-act="hint">Show where it goes</button>':'')+'</div>';
+    return;
+  }
+  if(state.focus){
+    const s=SYS[state.focus], list=visible().filter(p=>p.sys===state.focus);
+    panel.innerHTML=cc+
+     '<nav class="crumbs"><button class="link" data-go="overview">'+(jeep?"Jeep":"Engine")+'</button><span>/</span><span>'+s.name+'</span></nav>'+
+     '<span class="eyebrow" '+sw(state.focus)+'><span class="sw"></span>System</span><h2>'+s.name+'</h2><p class="lede">'+s.desc+'</p>'+
+     '<h3>Parts in this system</h3><div class="syslist">'+list.map(p=>
+       '<button class="sysrow" '+sw(p.sys)+' data-go="part:'+p.id+'"><span class="sw"></span><span><b>'+p.name+'</b><small>'+p.what.split(". ")[0]+'.</small></span><span class="ct">›</span></button>').join("")+'</div>'+
+     '<div class="actions"><button class="btn" data-go="overview">Show all systems</button></div>';
+    return;
+  }
+  const how='<h3>How to use it</h3><ul class="howto">'+
+   '<li><b>Drag</b><span>Pull any part off. Double-click it to send it back.</span></li>'+
+   '<li><b>Click</b><span>Read what the part does, its specs, and what tends to go wrong.</span></li>'+
+   '<li><b>View</b><span>Switch between the whole Jeep and the engine on its own.</span></li>'+
+   '<li><b>Explode</b><span>Spread every part out along the direction it comes off.</span></li>'+
+   '<li><b>See inside</b><span>Turn the body, engine castings, and gearbox cases to glass.</span></li>'+
+   (jeep?'<li><b>Gear</b><span>Pick a gear and transfer case range to see the wheels and driveshafts turn and the speed it gives.</span></li>':'<li><b>Run engine</b><span>Watch the four strokes in the corner strip.</span></li>')+
+   '<li><b>Rebuild</b><span>'+(jeep?"Scatter the chassis and put it back on the frame.":"Scatter the engine and put it back together.")+'</span></li></ul>'+
+   '<p class="foot">The model is a simplified teaching layout. Shapes and positions are close to the real Jeep but not to scale. Check a factory service manual before working on a real one.</p>';
+  if(jeep){
+    const chassisSys=SYS_ORDER.filter(k=>!ENGINE_SYS.includes(k)), engSys=ENGINE_SYS;
+    panel.innerHTML=cc+
+     '<span class="eyebrow">2000 Jeep Wrangler TJ</span><h2>The whole Jeep</h2>'+
+     '<p class="lede">A body-on-frame 4×4 with solid axles at both ends, coil springs at every corner, and a part-time transfer case. This one has the 2.5L four-cylinder, the AX5 five-speed manual, and air conditioning.</p>'+
+     '<h3>Factory specs</h3>'+specs([["Wheelbase","93.4 in"],["Track","58 in"],["Engine","2.5L I4, 120 hp, 140 lb‑ft"],["Transmission","Aisin AX5 five-speed manual"],["Transfer case","NP231 Command-Trac, 2.72 : 1 low"],["Axles","Dana 30 front, Dana 35 rear"],["Suspension","Quadra-Coil, solid axles"],["Brakes","Front disc, rear drum"],["Stock tires","P205/75R15"],["Air conditioning","R-134a, belt-driven compressor"]])+
+     '<h3>Chassis systems</h3><div class="syslist">'+chassisSys.map(sysRow).join("")+'</div>'+
+     '<h4>Engine & A/C systems</h4><div class="syslist">'+engSys.map(sysRow).join("")+'</div>'+how;
+  } else {
+    panel.innerHTML=cc+
+     '<span class="eyebrow">2000 Jeep Wrangler TJ</span><h2>2.5L inline-four</h2>'+
+     '<p class="lede">The base engine in the 2000 Wrangler: an AMC-designed four-cylinder with a cast-iron block and head, a pushrod valvetrain, and multiport fuel injection.</p>'+
+     '<h3>Factory specs</h3>'+specs([["Displacement","150 cu in (2.46 L)"],["Bore × stroke","3.88 × 3.19 in"],["Compression","9.1 : 1"],["Power","120 hp at 5,400 rpm"],["Torque","140 lb‑ft at 3,500 rpm"],["Firing order","1‑3‑4‑2"],["Valvetrain","Pushrod, 2 valves per cylinder"],["Fuel","Sequential multiport injection"],["Ignition","Distributor with one coil"]])+
+     '<h3>Systems</h3><div class="syslist">'+SYS_ORDER.filter(k=>visible().some(p=>p.sys===k)).map(sysRow).join("")+'</div>'+how;
+  }
+}
+panel.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]"), a=e.target.closest("[data-act]");
+  if(g){const v=g.dataset.go;
+    if(v==="overview"){state.selected=null; state.focus=null;}
+    else if(v.startsWith("sys:")){state.selected=null; state.focus=v.slice(4);}
+    else if(v.startsWith("part:")){select(v.slice(5)); return;}
+    syncUI(); renderPanel(); applyLook(); panel.scrollTop=0; return;}
+  if(a){const p=BY[state.selected];
+    if(a.dataset.act==="home"&&p) sendHome(p);
+    else if(a.dataset.act==="solo"&&p){state.focus=state.focus===p.sys?null:p.sys; syncUI(); renderPanel(); applyLook();}
+    else if(a.dataset.act==="hint") hint();}
+});
+function select(id,quiet){
+  if(state.selected===id && quiet) return;
+  state.selected=id;
+  if(id && state.focus && BY[id].sys!==state.focus) state.focus=null;
+  syncUI(); renderPanel(); applyLook(); if(!quiet) panel.scrollTop=0;
+}
+
+/* ---------- Toolbar & chips ---------- */
+const $=id=>document.getElementById(id);
+const chips=$("chips");
+function buildChips(){
+  const present=SYS_ORDER.filter(k=>visible().some(p=>p.sys===k));
+  const ch=present.filter(k=>!ENGINE_SYS.includes(k)), en=present.filter(k=>ENGINE_SYS.includes(k));
+  const c=k=>'<button class="chip" data-sys="'+k+'" '+sw(k)+'><span class="sw"></span>'+SYS[k].name+'</button>';
+  chips.innerHTML='<button class="chip" data-sys="" style="--c:var(--fg)">All systems</button>'+
+    (ch.length?ch.map(c).join("")+'<span class="chipsep"></span>':'')+en.map(c).join("");
+}
+chips.addEventListener("click",e=>{const b=e.target.closest("[data-sys]"); if(!b) return;
+  const k=b.dataset.sys||null; state.focus=(k&&state.focus===k)?null:k;
+  if(state.selected && state.focus && BY[state.selected].sys!==state.focus) state.selected=null;
+  syncUI(); renderPanel(); applyLook();});
+const explodeEl=$("explode"), explodeWrap=$("explodeWrap");
+explodeEl.addEventListener("input",()=>{state.explode=+explodeEl.value;});
+$("xray").onclick=()=>{state.xray=!state.xray; syncUI(); applyLook();};
+$("run").onclick=()=>{state.running=!state.running; syncUI();};
+$("speed").onclick=()=>{state.fast=!state.fast; syncUI();};
+$("reassemble").onclick=()=>{PARTS.forEach(p=>p.returning=true); state.explode=0; explodeEl.value=0;};
+$("resetView").onclick=()=>{const c=CAMS[state.view]; flyTo(state.challenge?c.ch:c.pos,c.tgt);};
+$("challenge").onclick=()=>{state.challenge?endChallenge():startChallenge();};
+$("viewSeg").addEventListener("click",e=>{const b=e.target.closest("[data-v]"); if(b && b.dataset.v!==state.view) setView(b.dataset.v);});
+const gearSeg=$("gearSeg"), tcSeg=$("tcSeg");
+gearSeg.innerHTML=["R","N","1","2","3","4","5"].map(g=>'<button data-g="'+g+'" aria-label="'+GEAR_NAME[g]+'">'+g+'</button>').join("");
+tcSeg.innerHTML=["2H","4H","N","4L"].map(t=>'<button data-t="'+t+'" aria-label="'+(t==="N"?"Neutral":t)+'">'+t+'</button>').join("");
+gearSeg.addEventListener("click",e=>{const b=e.target.closest("[data-g]"); if(b){state.gear=b.dataset.g; syncUI();}});
+tcSeg.addEventListener("click",e=>{const b=e.target.closest("[data-t]"); if(b){state.tc=b.dataset.t; syncUI();}});
+
+function setView(v){
+  if(state.challenge) endChallenge(true);
+  state.view=v;
+  PARTS.forEach(p=>{p.hidden = v==="engine" && p.area!=="engine"; p.group.visible=!p.hidden;});
+  if(grid) grid.visible = v==="jeep";
+  if(state.selected && BY[state.selected].hidden) state.selected=null;
+  if(state.focus && !visible().some(p=>p.sys===state.focus)) state.focus=null;
+  buildChips(); flyTo(CAMS[v].pos,CAMS[v].tgt);
+  syncUI(); renderPanel(); applyLook();
+}
+
+const strip=$("strip"), drivebox=$("drivebox");
+function driveInfo(){
+  const g=GEARS[state.gear], t=TC[state.tc];
+  const head=GEAR_NAME[state.gear]+(state.gear==="N"?"":" gear")+" · "+(state.tc==="N"?"transfer case N":state.tc);
+  if(!g) return head && '<b>'+head+'</b>The engine turns, but the transmission sends nothing to the driveshafts.';
+  if(!t) return '<b>'+head+'</b>The transmission turns, but the transfer case sends power to neither axle.';
+  const total=Math.abs(g)*t*AXLE, wr=2000/total, mph=wr*TIRE_D*Math.PI*60/63360;
+  const note={"2H":"Only the rear axle is driven. The front driveshaft still spins with the front wheels, because the TJ has no front axle disconnect.",
+    "4H":"Front and rear driveshafts are locked together for traction on loose or slippery ground.",
+    "4L":"Low range multiplies torque 2.72 times for crawling over rocks or steep grades."}[state.tc];
+  return '<b>'+head+'</b>At 2,000 engine rpm: <span class="num">'+Math.abs(g).toFixed(2)+' × '+t.toFixed(2)+' × '+AXLE+' = '+total.toFixed(1)+' : 1</span> → wheels <span class="num">'+Math.round(wr)+'</span> rpm ≈ <span class="num">'+mph.toFixed(mph<10?1:0)+'</span> mph'+(g<0?' backward':'')+'.<div class="note">'+note+'</div>';
+}
+function syncUI(){
+  const jeep=state.view==="jeep", ch=!!state.challenge;
+  [...$("viewSeg").children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view)));
+  $("xray").setAttribute("aria-pressed",state.xray);
+  $("run").setAttribute("aria-pressed",state.running); $("run").textContent=state.running?"Stop engine":"Run engine";
+  $("speed").setAttribute("aria-pressed",state.fast); $("speed").textContent="Speed: "+(state.fast?"fast":"slow");
+  $("speed").disabled=!state.running;
+  explodeEl.disabled=ch; explodeWrap.classList.toggle("off",ch);
+  $("reassemble").disabled=ch;
+  $("challenge").textContent=ch?"End challenge":"Rebuild challenge";
+  $("driveCtl").hidden=!jeep;
+  [...gearSeg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.g===state.gear)));
+  [...tcSeg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.t===state.tc)));
+  strip.hidden=!state.running;
+  drivebox.hidden=!jeep; if(jeep) drivebox.innerHTML=driveInfo();
+  [...chips.querySelectorAll("[data-sys]")].forEach(b=>b.setAttribute("aria-pressed",String((b.dataset.sys||null)===state.focus)));
+  renderCbar();
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){state.selected=null; state.focus=null; syncUI(); renderPanel(); applyLook();}});
+
+/* ---------- Motion ---------- */
+const STROKES=[["Power","ignition"],["Exhaust","exhaust"],["Intake","airfuel"],["Compression","valvetrain"]];
+strip.innerHTML=CYL_X.map((_,i)=>'<div class="cell" id="cell'+i+'"><div class="n">CYL '+(i+1)+'</div><div class="s">—</div></div>').join("")+'<div class="meta" id="smeta"></div>';
+const cells=CYL_X.map((_,i)=>$("cell"+i)), smeta=$("smeta");
+const lastStroke=[-1,-1,-1,-1];
+function mod(a,n){return ((a%n)+n)%n;}
+function pose(th){
+  const deg=th*180/Math.PI;
+  BY.crankshaft.anim.rot.rotation.x=th; BY.flywheel.anim.rot.rotation.x=th;
+  BY.camshaft.anim.rot.rotation.x=th/2; BY.fan.anim.rot.rotation.x=th*1.1;
+  BY.transmission.anim.main.rotation.x=th;
+  BY.pistons.anim.list.forEach(o=>{const a=th+THROW[o.i], ys=CR*Math.cos(a), zs=CR*Math.sin(a);
+    const yp=ys+Math.sqrt(ROD*ROD-zs*zs);
+    o.pg.position.y=yp; o.rg.position.set(CYL_X[o.i],ys,zs); o.rg.rotation.x=Math.atan2(-zs,yp-ys);});
+  BY.valvetrain.anim.valves.forEach(v=>{const c=mod(deg-PHASE[v.i],720)-v.open;
+    const lift=(c>=0&&c<=180)?LIFT*Math.sin(c/180*Math.PI):0;
+    v.vg.position.y=-lift; v.pg.position.y=lift; v.rk.rotation.x=Math.asin(Math.min(1,lift/1.3));});
+  BY.sparkPlugs.anim.sparks.forEach((s,i)=>{const c=mod(deg-PHASE[i]+12,720); s.visible=state.running && c<32;});
+  BY.frontWheels.anim.spin.forEach(w=>w.rotation.z=-wheelAng);
+  BY.rearWheels.anim.spin.forEach(w=>w.rotation.z=-wheelAng);
+  BY.frontDriveshaft.anim.sp.rotation.z=wheelAng*AXLE;
+  BY.rearDriveshaft.anim.sp.rotation.z=wheelAng*AXLE;
+  if(state.running){
+    CYL_X.forEach((_,i)=>{const k=Math.floor(mod(deg-PHASE[i],720)/180);
+      if(k!==lastStroke[i]){lastStroke[i]=k; cells[i].style.setProperty("--c",SYS[STROKES[k][1]].color); cells[i].querySelector(".s").textContent=STROKES[k][0];}});
+    smeta.textContent="Crank "+String(Math.floor(mod(deg,360))).padStart(3," ")+"° · cam "+String(Math.floor(mod(deg/2,360))).padStart(3," ")+"° · firing order 1‑3‑4‑2";
+  }
+}
+
+/* ---------- Resize, theme, loop ---------- */
+function resize(){const w=vp.clientWidth, h=vp.clientHeight; if(!w||!h) return; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(vp); resize();
+if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme","class"]});
+
+let last=performance.now();
+const ZERO=new V();
+function frame(t){
+  const dt=Math.min(.05,(t-last)/1000); last=t;
+  if(state.running){const d=dt*(state.fast?16:2.0); theta+=d;
+    const g=GEARS[state.gear], tc=TC[state.tc];
+    if(g && tc) wheelAng+=d/(g*tc*AXLE);}
+  explodeShown+=(state.explode-explodeShown)*Math.min(1,dt*10);
+  const e=explodeShown;
+  PARTS.forEach(p=>{
+    if(p.returning){p.offset.lerp(ZERO,Math.min(1,dt*8)); if(p.offset.lengthSq()<1e-4){p.offset.set(0,0,0);p.returning=false;}}
+    p.group.position.set(p.ex[0]*e+p.offset.x,p.ex[1]*e+p.offset.y,p.ex[2]*e+p.offset.z);
+    p.subs.forEach(s=>s.g.position.copy(s.base).addScaledVector(s.v,e));});
+  if(hintLine){const p=hintLine.userData.p; const pos=hintLine.geometry.attributes.position;
+    const a=p.anchor.clone().add(p.offset); pos.setXYZ(0,a.x,a.y,a.z); pos.needsUpdate=true; hintLine.computeLineDistances();}
+  if(fly){const k=Math.min(1,(t-fly.s)/900), s=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    camera.position.lerpVectors(fly.p0,fly.p1,s); controls.target.lerpVectors(fly.t0,fly.t1,s); if(k>=1) fly=null;}
+  pose(theta);
+  controls.update();
+  renderer.render(scene,camera);
+  requestAnimationFrame(frame);
+}
+applyTheme(); buildChips(); syncUI(); renderPanel();
+requestAnimationFrame(frame);
+})();
+</script>
